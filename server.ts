@@ -799,16 +799,34 @@ async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
       } as any);
 
       const contentType = res.headers.get('content-type') || '';
-      diagnostics.push(`${path}: HTTP ${res.status} (${contentType || 'no content-type'})`);
+      let bodySnippet = '';
+      let rawText = '';
+      try {
+        rawText = await res.text();
+        if (contentType.toLowerCase().includes('json')) {
+          try {
+            const parsed = JSON.parse(rawText);
+            bodySnippet = ': ' + (parsed.message || parsed.error || rawText.substring(0, 100));
+          } catch {
+            bodySnippet = ': ' + rawText.substring(0, 100);
+          }
+        } else {
+          bodySnippet = ': ' + rawText.substring(0, 100);
+        }
+      } catch (bodyErr: any) {
+        bodySnippet = ` (failed to read body: ${bodyErr.message})`;
+      }
 
-      if (res.status !== 404) {
+      diagnostics.push(`${path}: HTTP ${res.status} (${contentType || 'no content-type'})${bodySnippet}`);
+
+      if (res.status === 200 || res.status === 201) {
         if (contentType.toLowerCase().includes('text/html')) {
           console.log(`[UISP Sync] Path returned HTML instead of JSON: ${path}`);
           continue;
         }
 
         try {
-          const testData = await res.json();
+          const testData = JSON.parse(rawText);
           devicesRes = res;
           parsedData = testData;
           break;
