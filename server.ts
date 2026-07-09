@@ -480,6 +480,7 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   ];
 
   let devicesRes: any = null;
+  let parsedData: any = null;
   let lastErrorMsg = '';
   let finalPathUsed = '';
 
@@ -495,9 +496,23 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
       });
       
       if (res.status !== 404) {
-        devicesRes = res;
-        finalPathUsed = path;
-        break;
+        // Ensure content-type is json if present
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.toLowerCase().includes('text/html')) {
+          console.log(`[UniFi Sync] Path returned HTML instead of JSON: ${path}`);
+          continue;
+        }
+
+        try {
+          const testData = await res.json();
+          devicesRes = res;
+          parsedData = testData;
+          finalPathUsed = path;
+          break;
+        } catch (jsonErr: any) {
+          console.log(`[UniFi Sync] Path returned non-JSON body: ${path} (${jsonErr.message})`);
+          continue;
+        }
       } else {
         console.log(`[UniFi Sync] Path returned 404: ${path}`);
       }
@@ -512,7 +527,7 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
       if (lastErrorMsg) {
         throw new Error(`Connection timed out or host unreachable: ${lastErrorMsg}`);
       } else {
-        throw new Error(`Tested endpoints returned 404. Check if UniFi Network application is running or if Site ID '${site}' is correct.`);
+        throw new Error(`Tested endpoints returned 404/invalid content. Check if UniFi Network application is running or if Site ID '${site}' is correct.`);
       }
     }
 
@@ -520,7 +535,7 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
       throw new Error(`status ${devicesRes.status} ${devicesRes.statusText} at ${finalPathUsed}`);
     }
 
-    const data: any = await devicesRes.json();
+    const data: any = parsedData;
     let rawDevices: any[] = [];
     
     if (Array.isArray(data)) {
