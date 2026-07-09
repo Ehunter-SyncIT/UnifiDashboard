@@ -75,28 +75,65 @@ fi
 NODE_VER=$(node -v | cut -d'v' -f2)
 log_success "Found Node.js v$NODE_VER"
 
-# 3. Handle directory structure
+# 3. Handle directory structure and automatic repository cloning
 INSTALL_DIR=$(pwd)
 
-# Check if package.json exists in current folder, otherwise guide the user
+# Check if package.json exists in current folder, otherwise clone from GitHub
 if [ ! -f "package.json" ]; then
-    log_error "package.json was not found in the current directory (${INSTALL_DIR})."
-    echo ""
-    echo -e "${YELLOW}HOW TO FIX THIS:${NC}"
-    echo "This installation script must be run inside the project's extracted root folder."
-    echo ""
-    echo "Please follow these simple steps to install the dashboard:"
-    echo "  1. Export/download the project source code as a ZIP file from the AI Studio Settings menu."
-    echo "  2. Extract the downloaded ZIP file on your Ubuntu Virtual Machine:"
-    echo "     unzip -q -o be9cb3b3-06a2-42df-9ba4-cd3e9c305902.zip -d synchronous-it-dashboard"
-    echo "  3. Navigate into the newly created project folder:"
-    echo "     cd synchronous-it-dashboard"
-    echo "  4. Execute the installer script from inside that directory:"
-    echo "     ./install.sh"
-    echo ""
-    echo "Or run the one-liner command directly inside that directory!"
-    echo ""
-    exit 1
+    log_info "package.json was not found in the current directory (${INSTALL_DIR})."
+    log_info "Attempting to retrieve the dashboard from GitHub automatically..."
+
+    # Check/install git
+    if ! command -v git &> /dev/null; then
+        log_info "git is required but not found. Installing git..."
+        if [ "$IS_ROOT" = "true" ]; then
+            if [ -f /etc/debian_version ]; then
+                apt-get update -y && apt-get install -y git
+            elif [ -f /etc/redhat-release ]; then
+                yum install -y git
+            else
+                log_error "Please install 'git' manually and re-run."
+                exit 1
+            fi
+        else
+            if command -v sudo &> /dev/null; then
+                sudo apt-get update -y && sudo apt-get install -y git || sudo yum install -y git || { log_error "Failed to install git. Please install it manually."; exit 1; }
+            else
+                log_error "Please install 'git' manually and re-run."
+                exit 1
+            fi
+        fi
+    fi
+
+    # Clone or navigate
+    if [ -d "UnifiDashboard" ]; then
+        log_info "Directory 'UnifiDashboard' already exists. Navigating into it..."
+        cd UnifiDashboard
+        INSTALL_DIR=$(pwd)
+        if [ -d ".git" ]; then
+            log_info "Pulling latest changes..."
+            git pull || log_warn "Failed to pull latest changes, continuing with local version..."
+        fi
+    elif [ -d "synchronous-it-dashboard" ]; then
+        log_info "Directory 'synchronous-it-dashboard' already exists. Navigating into it..."
+        cd synchronous-it-dashboard
+        INSTALL_DIR=$(pwd)
+        if [ -d ".git" ]; then
+            log_info "Pulling latest changes..."
+            git pull || log_warn "Failed to pull latest changes, continuing with local version..."
+        fi
+    else
+        log_info "Cloning @Synchronous-IT Network Dashboard repository..."
+        git clone https://github.com/Ehunter-SyncIT/UnifiDashboard.git synchronous-it-dashboard
+        cd synchronous-it-dashboard
+        INSTALL_DIR=$(pwd)
+    fi
+
+    # Double check if we now have package.json
+    if [ ! -f "package.json" ]; then
+        log_error "Failed to locate package.json even after cloning repository."
+        exit 1
+    fi
 fi
 
 log_info "Installing dashboard assets in: ${INSTALL_DIR}"
