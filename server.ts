@@ -627,6 +627,136 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   }
 }
 
+async function fetchRealUniFiClients(config: any): Promise<any[]> {
+  if (!config.enabled || !config.url || !config.apiKey) return [];
+
+  if (config.skipTls) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  } else {
+    delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  }
+
+  const baseUrl = config.url.replace(/\/$/, '');
+  const site = config.siteId || 'default';
+
+  const pathsToTry = [
+    `/api/v1/sites/${site}/clients`,
+    `/v1/sites/${site}/clients`,
+    `/proxy/network/api/s/${site}/stat/sta`,
+    `/api/s/${site}/stat/sta`,
+    `/network/api/s/${site}/stat/sta`
+  ];
+
+  let clientsRes: any = null;
+  let parsedData: any = null;
+  let lastErrorMsg = '';
+  let finalPathUsed = '';
+
+  for (const path of pathsToTry) {
+    try {
+      console.log(`[UniFi Client Sync] Trying endpoint: ${baseUrl}${path}`);
+      const res = await fetch(`${baseUrl}${path}`, {
+        headers: {
+          'X-API-KEY': config.apiKey,
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000
+      } as any);
+
+      if (res.status !== 404) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.toLowerCase().includes('text/html')) {
+          console.log(`[UniFi Client Sync] Path returned HTML instead of JSON: ${path}`);
+          continue;
+        }
+
+        try {
+          const testData = await res.json();
+          clientsRes = res;
+          parsedData = testData;
+          finalPathUsed = path;
+          break;
+        } catch (jsonErr: any) {
+          console.log(`[UniFi Client Sync] Path returned non-JSON body: ${path} (${jsonErr.message})`);
+          continue;
+        }
+      }
+    } catch (err: any) {
+      console.log(`[UniFi Client Sync] Error trying path ${path}: ${err.message}`);
+      lastErrorMsg = err.message;
+    }
+  }
+
+  if (!clientsRes) {
+    throw new Error(`Tested endpoints returned 404/invalid content for clients.`);
+  }
+
+  if (!clientsRes.ok) {
+    throw new Error(`status ${clientsRes.status} ${clientsRes.statusText} at ${finalPathUsed}`);
+  }
+
+  const data = parsedData;
+  let rawClients: any[] = [];
+  if (Array.isArray(data)) {
+    rawClients = data;
+  } else if (data && Array.isArray(data.data)) {
+    rawClients = data.data;
+  } else if (data && typeof data === 'object') {
+    const arrayVal = Object.values(data).find(v => Array.isArray(v));
+    if (arrayVal) {
+      rawClients = arrayVal as any[];
+    }
+  }
+
+  console.log(`[UniFi Client Sync] Successfully fetched ${rawClients.length} clients`);
+
+  return rawClients.map((client: any) => {
+    const mac = client.macAddress || client.mac || '00:00:00:00:00:00';
+    const ip = client.ipAddress || client.ip || '0.0.0.0';
+    const name = client.name || client.hostname || client.dhcpname || `Client-${mac.substring(12).replace(/:/g, '').toUpperCase()}`;
+    
+    let deviceType = 'laptop';
+    const lowerName = name.toLowerCase();
+    const os = (client.os_name || client.fingerprint_dev_ids?.os_name || '').toLowerCase();
+    
+    if (lowerName.includes('iphone') || lowerName.includes('phone') || lowerName.includes('android') || os.includes('ios') || os.includes('android')) {
+      deviceType = 'phone';
+    } else if (lowerName.includes('ipad') || lowerName.includes('tablet') || os.includes('ipad')) {
+      deviceType = 'tablet';
+    } else if (lowerName.includes('nas') || lowerName.includes('server') || lowerName.includes('synology') || lowerName.includes('unraid')) {
+      deviceType = 'server';
+    } else if (lowerName.includes('tv') || lowerName.includes('television') || lowerName.includes('apple tv') || lowerName.includes('roku') || lowerName.includes('shield')) {
+      deviceType = 'tv';
+    } else if (lowerName.includes('thermostat') || lowerName.includes('camera') || lowerName.includes('iot') || lowerName.includes('smart') || lowerName.includes('plug')) {
+      deviceType = 'iot';
+    }
+
+    const isWifi = client.is_wired === false || client.essid !== undefined || client.ap_mac !== undefined || client.channel !== undefined;
+    const apIdOrSwitchId = client.ap_mac || client.switch_mac || 'unifi-sw-ent-24';
+    const apOrSwitchName = client.ap_name || client.switch_name || (isWifi ? 'Office AP Enterprise' : 'Main Distribution Switch');
+
+    return {
+      id: `client-real-${mac.replace(/:/g, '')}`,
+      name,
+      ipAddress: ip,
+      macAddress: mac,
+      deviceType,
+      apIdOrSwitchId,
+      apOrSwitchName,
+      connectionType: isWifi ? 'wifi' : 'wired',
+      wifiBand: isWifi ? (client.channel && client.channel > 14 ? '5GHz' : '2.4GHz') : undefined,
+      signalStrengthDbm: isWifi ? (client.rssi ? -Math.abs(client.rssi) : -62) : undefined,
+      vlanId: client.vlan !== undefined ? client.vlan : 1,
+      activityInMbps: client['tx_bytes-r'] ? Math.round((client['tx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 4 * 10) / 10,
+      activityOutMbps: client['rx_bytes-r'] ? Math.round((client['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 1.5 * 10) / 10,
+      totalDataDownloadedGb: client.tx_bytes ? Math.round((client.tx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 80 * 100) / 100,
+      totalDataUploadedGb: client.rx_bytes ? Math.round((client.rx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 15 * 100) / 100,
+      uptimeSeconds: client.uptime || 3600,
+      isBlocked: client.blocked || false
+    };
+  });
+}
+
 async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
   if (!config.enabled || !config.url || !config.token) return [];
 
@@ -637,58 +767,100 @@ async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
   }
 
   const baseUrl = config.url.replace(/\/$/, '');
-  try {
-    const res = await fetch(`${baseUrl}/api/v1.0/devices`, {
-      headers: {
-        'X-Auth-Token': config.token,
-        'Content-Type': 'application/json'
-      }
-    });
+  const pathsToTry = [
+    '/api/v1/devices',
+    '/api/v1.0/devices',
+    '/api/v2.0/devices',
+    '/api/v1/nms/devices'
+  ];
 
-    if (!res.ok) {
-      throw new Error(`UISP HTTP Error: ${res.statusText}`);
+  let devicesRes: any = null;
+  let parsedData: any = null;
+  let lastErrorMsg = '';
+
+  for (const path of pathsToTry) {
+    try {
+      console.log(`[UISP Sync] Trying endpoint: ${baseUrl}${path}`);
+      const res = await fetch(`${baseUrl}${path}`, {
+        headers: {
+          'X-Auth-Token': config.token,
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000
+      } as any);
+
+      if (res.status !== 404) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.toLowerCase().includes('text/html')) {
+          console.log(`[UISP Sync] Path returned HTML instead of JSON: ${path}`);
+          continue;
+        }
+
+        try {
+          const testData = await res.json();
+          devicesRes = res;
+          parsedData = testData;
+          break;
+        } catch (jsonErr: any) {
+          console.log(`[UISP Sync] Path returned non-JSON body: ${path} (${jsonErr.message})`);
+          continue;
+        }
+      }
+    } catch (err: any) {
+      console.log(`[UISP Sync] Error trying path ${path}: ${err.message}`);
+      lastErrorMsg = err.message;
+    }
+  }
+
+  if (!devicesRes) {
+    if (lastErrorMsg) {
+      throw new Error(`Connection failed or host unreachable: ${lastErrorMsg}`);
+    } else {
+      throw new Error(`Tested UISP endpoints returned 404/invalid content. Check your UISP version/host.`);
+    }
+  }
+
+  if (!devicesRes.ok) {
+    throw new Error(`UISP HTTP Error: ${devicesRes.status} ${devicesRes.statusText}`);
+  }
+
+  const rawDevices = parsedData;
+  if (!Array.isArray(rawDevices)) return [];
+
+  return rawDevices.map((dev: any) => {
+    const isOnline = dev.overview?.status === 'active' || dev.overview?.status === 'online';
+    
+    let wirelessDetails = undefined;
+    if (dev.overview?.signal || dev.overview?.distance) {
+      wirelessDetails = {
+        signalStrengthDbm: dev.overview?.signal || -50,
+        frequencyMhz: dev.overview?.frequency || 5800,
+        distanceMeters: dev.overview?.distance || 100,
+        noiseFloorDbm: dev.overview?.noiseFloor || -90,
+        txRateMbps: dev.overview?.txRate || 1000,
+        rxRateMbps: dev.overview?.rxRate || 1000
+      };
     }
 
-    const rawDevices: any = await res.json();
-    if (!Array.isArray(rawDevices)) return [];
-
-    return rawDevices.map((dev: any) => {
-      const isOnline = dev.overview?.status === 'active' || dev.overview?.status === 'online';
-      
-      let wirelessDetails = undefined;
-      if (dev.overview?.signal || dev.overview?.distance) {
-        wirelessDetails = {
-          signalStrengthDbm: dev.overview?.signal || -50,
-          frequencyMhz: dev.overview?.frequency || 5800,
-          distanceMeters: dev.overview?.distance || 100,
-          noiseFloorDbm: dev.overview?.noiseFloor || -90,
-          txRateMbps: dev.overview?.txRate || 1000,
-          rxRateMbps: dev.overview?.rxRate || 1000
-        };
-      }
-
-      return {
-        id: `uisp-real-${dev.identification?.id || (dev.identification?.mac ? dev.identification.mac.replace(/:/g, '') : Math.random().toString(36).substr(2, 9))}`,
-        name: dev.identification?.name || dev.identification?.model || 'UISP Device',
-        type: 'uisp' as const,
-        category: (dev.identification?.category || (dev.identification?.model && dev.identification?.model.toLowerCase().includes('fiber') ? 'wireless' : 'router')) as any,
-        model: dev.identification?.model || 'Unknown',
-        status: (isOnline ? 'online' : 'offline') as any,
-        ipAddress: dev.ipAddress || (dev.interfaces?.[0]?.addresses?.[0]?.split('/')?.[0]) || '0.0.0.0',
-        macAddress: dev.identification?.mac || '00:00:00:00:00:00',
-        firmware: dev.overview?.firmwareVersion || 'v1.0.0',
-        cpuUsage: dev.overview?.cpu ? Math.round(parseFloat(dev.overview.cpu)) : 5,
-        ramUsage: dev.overview?.ram ? Math.round(parseFloat(dev.overview.ram)) : 20,
-        bandwidthInMbps: dev.overview?.downloadSpeed ? Math.round((dev.overview.downloadSpeed * 8) / (1024 * 1024) * 10) / 10 : 0,
-        bandwidthOutMbps: dev.overview?.uploadSpeed ? Math.round((dev.overview.uploadSpeed * 8) / (1024 * 1024) * 10) / 10 : 0,
-        uptimeSeconds: dev.overview?.uptime || 0,
-        alertsCount: dev.overview?.alertsCount || 0,
-        wirelessDetails
-      };
-    });
-  } catch (err: any) {
-    throw new Error(`UISP Device fetch failed: ${err.message}`);
-  }
+    return {
+      id: `uisp-real-${dev.identification?.id || (dev.identification?.mac ? dev.identification.mac.replace(/:/g, '') : Math.random().toString(36).substr(2, 9))}`,
+      name: dev.identification?.name || dev.identification?.model || 'UISP Device',
+      type: 'uisp' as const,
+      category: (dev.identification?.category || (dev.identification?.model && dev.identification?.model.toLowerCase().includes('fiber') ? 'wireless' : 'router')) as any,
+      model: dev.identification?.model || 'Unknown',
+      status: (isOnline ? 'online' : 'offline') as any,
+      ipAddress: dev.ipAddress || (dev.interfaces?.[0]?.addresses?.[0]?.split('/')?.[0]) || '0.0.0.0',
+      macAddress: dev.identification?.mac || '00:00:00:00:00:00',
+      firmware: dev.overview?.firmwareVersion || 'v1.0.0',
+      cpuUsage: dev.overview?.cpu ? Math.round(parseFloat(dev.overview.cpu)) : 5,
+      ramUsage: dev.overview?.ram ? Math.round(parseFloat(dev.overview.ram)) : 20,
+      bandwidthInMbps: dev.overview?.downloadSpeed ? Math.round((dev.overview.downloadSpeed * 8) / (1024 * 1024) * 10) / 10 : 0,
+      bandwidthOutMbps: dev.overview?.uploadSpeed ? Math.round((dev.overview.uploadSpeed * 8) / (1024 * 1024) * 10) / 10 : 0,
+      uptimeSeconds: dev.overview?.uptime || 0,
+      alertsCount: dev.overview?.alertsCount || 0,
+      wirelessDetails
+    };
+  });
 }
 
 // Generate initial analytics history (past 20 periods)
@@ -842,18 +1014,20 @@ setInterval(() => {
 
 // Get Devices (UniFi and UISP)
 app.get('/api/devices', async (req, res) => {
-  let finalDevices = [...state.devices];
-  
   const unifiEnabled = state.apiConfig?.unifi?.enabled;
   const uispEnabled = state.apiConfig?.uisp?.enabled;
+  
+  // If no live integration is configured/enabled, return all simulated devices
+  if (!unifiEnabled && !uispEnabled) {
+    return res.json(state.devices);
+  }
+
+  let finalDevices: NetworkDevice[] = [];
   
   if (unifiEnabled) {
     try {
       const realUnifi = await fetchRealUniFiDevices(state.apiConfig.unifi);
-      if (realUnifi.length > 0) {
-        finalDevices = finalDevices.filter(d => d.type !== 'unifi');
-        finalDevices.push(...realUnifi);
-      }
+      finalDevices.push(...realUnifi);
     } catch (err: any) {
       console.error("UniFi Live Fetch Error:", err);
       const alreadyHasAlert = state.alerts.some(a => a.id.startsWith('alert-unifi-fail') && !a.acknowledged);
@@ -865,7 +1039,7 @@ app.get('/api/devices', async (req, res) => {
           deviceId: 'unifi-api',
           deviceName: 'UniFi API Link',
           title: 'UniFi Controller Offline',
-          message: `Could not connect to UniFi Network Application. Error: ${err.message}. Using simulated nodes.`,
+          message: `Could not connect to UniFi Network Application. Error: ${err.message}.`,
           acknowledged: false,
           category: 'connection'
         });
@@ -876,10 +1050,7 @@ app.get('/api/devices', async (req, res) => {
   if (uispEnabled) {
     try {
       const realUisp = await fetchRealUISPDevices(state.apiConfig.uisp);
-      if (realUisp.length > 0) {
-        finalDevices = finalDevices.filter(d => d.type !== 'uisp');
-        finalDevices.push(...realUisp);
-      }
+      finalDevices.push(...realUisp);
     } catch (err: any) {
       console.error("UISP Live Fetch Error:", err);
       const alreadyHasAlert = state.alerts.some(a => a.id.startsWith('alert-uisp-fail') && !a.acknowledged);
@@ -891,7 +1062,7 @@ app.get('/api/devices', async (req, res) => {
           deviceId: 'uisp-api',
           deviceName: 'UISP API Link',
           title: 'UISP Controller Offline',
-          message: `Could not sync with UISP Server. Error: ${err.message}. Using simulated nodes.`,
+          message: `Could not sync with UISP Server. Error: ${err.message}.`,
           acknowledged: false,
           category: 'connection'
         });
@@ -1112,8 +1283,20 @@ app.post('/api/alerts/clear', (req, res) => {
 });
 
 // Get clients list
-app.get('/api/clients', (req, res) => {
-  res.json(state.clients);
+app.get('/api/clients', async (req, res) => {
+  const unifiEnabled = state.apiConfig?.unifi?.enabled;
+  
+  if (!unifiEnabled) {
+    return res.json(state.clients);
+  }
+
+  try {
+    const realClients = await fetchRealUniFiClients(state.apiConfig.unifi);
+    res.json(realClients);
+  } catch (err: any) {
+    console.error("UniFi Live Clients Fetch Error:", err);
+    res.json([]);
+  }
 });
 
 // Configure client name / alias
