@@ -78,6 +78,16 @@ log_success "Found Node.js v$NODE_VER"
 # 3. Handle directory structure and automatic repository cloning
 INSTALL_DIR=$(pwd)
 
+# Configure Git safe directory globally for the current path to prevent "dubious ownership" errors
+if command -v git &> /dev/null; then
+    git config --global --add safe.directory "${INSTALL_DIR}" || true
+    # If running from inside an existing cloned repo, pull updates automatically
+    if [ -d ".git" ] && [ -f "package.json" ]; then
+        log_info "Existing repository detected. Pulling the latest dashboard updates..."
+        git pull || log_warn "Could not pull latest changes automatically. Proceeding with local files..."
+    fi
+fi
+
 # Check if package.json exists in current folder, otherwise clone from GitHub
 if [ ! -f "package.json" ]; then
     log_info "package.json was not found in the current directory (${INSTALL_DIR})."
@@ -111,6 +121,7 @@ if [ ! -f "package.json" ]; then
         cd UnifiDashboard
         INSTALL_DIR=$(pwd)
         if [ -d ".git" ]; then
+            git config --global --add safe.directory "${INSTALL_DIR}" || true
             log_info "Pulling latest changes..."
             git pull || log_warn "Failed to pull latest changes, continuing with local version..."
         fi
@@ -119,6 +130,7 @@ if [ ! -f "package.json" ]; then
         cd synchronous-it-dashboard
         INSTALL_DIR=$(pwd)
         if [ -d ".git" ]; then
+            git config --global --add safe.directory "${INSTALL_DIR}" || true
             log_info "Pulling latest changes..."
             git pull || log_warn "Failed to pull latest changes, continuing with local version..."
         fi
@@ -127,6 +139,7 @@ if [ ! -f "package.json" ]; then
         git clone https://github.com/Ehunter-SyncIT/UnifiDashboard.git synchronous-it-dashboard
         cd synchronous-it-dashboard
         INSTALL_DIR=$(pwd)
+        git config --global --add safe.directory "${INSTALL_DIR}" || true
     fi
 
     # Double check if we now have package.json
