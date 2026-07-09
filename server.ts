@@ -455,19 +455,67 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
     delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
   }
 
-  const baseUrl = config.url.replace(/\/$/, '');
+  const rawUrl = config.url.replace(/\/$/, '');
+  let baseUrl = rawUrl;
+  
+  // Clean potential subpaths from base URL to avoid duplicate routing segments
+  if (baseUrl.includes('/proxy/network')) {
+    baseUrl = baseUrl.split('/proxy/network')[0];
+  } else if (baseUrl.includes('/network')) {
+    baseUrl = baseUrl.split('/network')[0];
+  } else if (baseUrl.includes('/api/')) {
+    baseUrl = baseUrl.split('/api/')[0];
+  }
+  baseUrl = baseUrl.replace(/\/$/, '');
+
   const site = config.siteId || 'default';
-  try {
-    const devicesRes = await fetch(`${baseUrl}/api/s/${site}/stat/device`, {
-      headers: {
-        'X-API-Key': config.apiKey || '',
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+  
+  // Try endpoints for both UniFi OS and self-hosted/legacy controllers
+  const pathsToTry = [
+    `/proxy/network/api/s/${site}/stat/device`,
+    `/api/s/${site}/stat/device`,
+    `/network/api/s/${site}/stat/device`
+  ];
+
+  let devicesRes: any = null;
+  let lastErrorMsg = '';
+  let finalPathUsed = '';
+
+  for (const path of pathsToTry) {
+    try {
+      console.log(`[UniFi Sync] Testing path: ${baseUrl}${path}`);
+      const res = await fetch(`${baseUrl}${path}`, {
+        headers: {
+          'X-API-Key': config.apiKey || '',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (res.status !== 404) {
+        devicesRes = res;
+        finalPathUsed = path;
+        break;
+      } else {
+        console.log(`[UniFi Sync] Path returned 404: ${path}`);
       }
-    });
+    } catch (err: any) {
+      console.log(`[UniFi Sync] Path failed with error: ${path} (${err.message})`);
+      lastErrorMsg = err.message;
+    }
+  }
+
+  try {
+    if (!devicesRes) {
+      if (lastErrorMsg) {
+        throw new Error(`Connection timed out or host unreachable: ${lastErrorMsg}`);
+      } else {
+        throw new Error(`Tested endpoints returned 404. Check if UniFi Network application is running or if Site ID '${site}' is correct.`);
+      }
+    }
 
     if (!devicesRes.ok) {
-      throw new Error(`Failed to fetch devices: status ${devicesRes.status} ${devicesRes.statusText}`);
+      throw new Error(`status ${devicesRes.status} ${devicesRes.statusText} at ${finalPathUsed}`);
     }
 
     const data: any = await devicesRes.json();
