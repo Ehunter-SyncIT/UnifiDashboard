@@ -1,0 +1,6 @@
+{
+  "name": "@Synchronous-IT Network Dashboard",
+  "description": "Full-stack real-time analytics and device manager for Ubiquiti UniFi and UISP infrastructure, complete with automated bandwidth spike alerts, dark mode, and Gemini AI NetOps diagnostic assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
