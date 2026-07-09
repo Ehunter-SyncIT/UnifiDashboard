@@ -77,6 +77,28 @@ log_success "Found Node.js v$NODE_VER"
 
 # 3. Handle directory structure
 INSTALL_DIR=$(pwd)
+
+# Check if package.json exists in current folder, otherwise guide the user
+if [ ! -f "package.json" ]; then
+    log_error "package.json was not found in the current directory (${INSTALL_DIR})."
+    echo ""
+    echo -e "${YELLOW}HOW TO FIX THIS:${NC}"
+    echo "This installation script must be run inside the project's extracted root folder."
+    echo ""
+    echo "Please follow these simple steps to install the dashboard:"
+    echo "  1. Export/download the project source code as a ZIP file from the AI Studio Settings menu."
+    echo "  2. Extract the downloaded ZIP file on your Ubuntu Virtual Machine:"
+    echo "     unzip -q -o be9cb3b3-06a2-42df-9ba4-cd3e9c305902.zip -d synchronous-it-dashboard"
+    echo "  3. Navigate into the newly created project folder:"
+    echo "     cd synchronous-it-dashboard"
+    echo "  4. Execute the installer script from inside that directory:"
+    echo "     ./install.sh"
+    echo ""
+    echo "Or run the one-liner command directly inside that directory!"
+    echo ""
+    exit 1
+fi
+
 log_info "Installing dashboard assets in: ${INSTALL_DIR}"
 
 # 4. Install npm packages
