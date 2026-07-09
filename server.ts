@@ -771,12 +771,21 @@ async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
     '/api/v1/devices',
     '/api/v1.0/devices',
     '/api/v2.0/devices',
-    '/api/v1/nms/devices'
+    '/api/v2.1/devices',
+    '/api/v2.2/devices',
+    '/api/v2.3/devices',
+    '/api/v2.4/devices',
+    '/api/v2.5/devices',
+    '/api/v1/nms/devices',
+    '/nms/api/v1/devices',
+    '/nms/api/v1.0/devices',
+    '/v1/devices'
   ];
 
   let devicesRes: any = null;
   let parsedData: any = null;
   let lastErrorMsg = '';
+  const diagnostics: string[] = [];
 
   for (const path of pathsToTry) {
     try {
@@ -789,8 +798,10 @@ async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
         timeout: 5000
       } as any);
 
+      const contentType = res.headers.get('content-type') || '';
+      diagnostics.push(`${path}: HTTP ${res.status} (${contentType || 'no content-type'})`);
+
       if (res.status !== 404) {
-        const contentType = res.headers.get('content-type') || '';
         if (contentType.toLowerCase().includes('text/html')) {
           console.log(`[UISP Sync] Path returned HTML instead of JSON: ${path}`);
           continue;
@@ -809,14 +820,16 @@ async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
     } catch (err: any) {
       console.log(`[UISP Sync] Error trying path ${path}: ${err.message}`);
       lastErrorMsg = err.message;
+      diagnostics.push(`${path}: Error (${err.message})`);
     }
   }
 
   if (!devicesRes) {
-    if (lastErrorMsg) {
+    const diagStr = diagnostics.join(' | ');
+    if (lastErrorMsg && diagnostics.every(d => d.includes('Error'))) {
       throw new Error(`Connection failed or host unreachable: ${lastErrorMsg}`);
     } else {
-      throw new Error(`Tested UISP endpoints returned 404/invalid content. Check your UISP version/host.`);
+      throw new Error(`Tested UISP endpoints returned 404/invalid content. Diagnostics: ${diagStr}`);
     }
   }
 
