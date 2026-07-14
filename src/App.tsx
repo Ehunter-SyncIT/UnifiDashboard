@@ -226,7 +226,7 @@ export default function App() {
   const totalCount = devices.length;
   const unreadAlertsCount = alerts.filter(a => !a.acknowledged).length;
 
-  const wanDevice = devices.find(d => d.id === 'unifi-udm-se');
+  const wanDevice = devices.find(d => d.id === 'unifi-udm-se') || devices.find(d => d.category === 'router' && d.type === 'unifi') || devices.find(d => d.category === 'router');
   const totalDownloadMbps = wanDevice ? wanDevice.bandwidthInMbps : 0;
   const totalUploadMbps = wanDevice ? wanDevice.bandwidthOutMbps : 0;
 

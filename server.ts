@@ -455,16 +455,22 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
     delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
   }
 
-  const rawUrl = config.url.replace(/\/$/, '');
-  let baseUrl = rawUrl;
-  
-  // Clean potential subpaths from base URL to avoid duplicate routing segments
-  if (baseUrl.includes('/proxy/network')) {
-    baseUrl = baseUrl.split('/proxy/network')[0];
-  } else if (baseUrl.includes('/network')) {
-    baseUrl = baseUrl.split('/network')[0];
-  } else if (baseUrl.includes('/api/')) {
-    baseUrl = baseUrl.split('/api/')[0];
+  let baseUrl = config.url.trim().replace(/\/$/, '');
+  try {
+    const parsedUrl = new URL(baseUrl);
+    baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+  } catch {
+    if (baseUrl.includes('/proxy/network')) {
+      baseUrl = baseUrl.split('/proxy/network')[0];
+    } else if (baseUrl.includes('/network')) {
+      baseUrl = baseUrl.split('/network')[0];
+    } else if (baseUrl.includes('/api/')) {
+      baseUrl = baseUrl.split('/api/')[0];
+    } else if (baseUrl.includes('/v1')) {
+      baseUrl = baseUrl.split('/v1')[0];
+    } else if (baseUrl.includes('/v2')) {
+      baseUrl = baseUrl.split('/v2')[0];
+    }
   }
   baseUrl = baseUrl.replace(/\/$/, '');
 
@@ -596,11 +602,24 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
         };
       } else {
         const isOnline = dev.state === 1 || dev.state === 'connected' || dev.state === true || (dev.uptime && dev.uptime > 0);
+        
+        let category: 'router' | 'switch' | 'ap' = 'switch';
+        const typeStr = String(dev.type || '').toLowerCase();
+        const modelStr = String(dev.model || '').toLowerCase();
+        
+        if (typeStr === 'uap' || modelStr.includes('ap') || modelStr.includes('u6') || modelStr.includes('ac')) {
+          category = 'ap';
+        } else if (typeStr === 'usw' || modelStr.includes('switch') || modelStr.includes('us-')) {
+          category = 'switch';
+        } else if (typeStr === 'ugw' || typeStr === 'uxg' || typeStr === 'udg' || typeStr === 'udm' || modelStr.includes('udm') || modelStr.includes('router') || modelStr.includes('gateway')) {
+          category = 'router';
+        }
+
         return {
           id: `unifi-real-${dev.mac ? dev.mac.replace(/:/g, '') : Math.random().toString(36).substr(2, 9)}`,
           name: dev.name || dev.model || 'UniFi Device',
           type: 'unifi' as const,
-          category: (dev.type || (dev.model && dev.model.toLowerCase().includes('ap') ? 'ap' : 'switch')) as any,
+          category,
           model: dev.model || 'Unknown Model',
           status: (isOnline ? 'online' : 'offline') as any,
           ipAddress: dev.ip || '0.0.0.0',
@@ -636,7 +655,24 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
     delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
   }
 
-  const baseUrl = config.url.replace(/\/$/, '');
+  let baseUrl = config.url.trim().replace(/\/$/, '');
+  try {
+    const parsedUrl = new URL(baseUrl);
+    baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+  } catch {
+    if (baseUrl.includes('/proxy/network')) {
+      baseUrl = baseUrl.split('/proxy/network')[0];
+    } else if (baseUrl.includes('/network')) {
+      baseUrl = baseUrl.split('/network')[0];
+    } else if (baseUrl.includes('/api/')) {
+      baseUrl = baseUrl.split('/api/')[0];
+    } else if (baseUrl.includes('/v1')) {
+      baseUrl = baseUrl.split('/v1')[0];
+    } else if (baseUrl.includes('/v2')) {
+      baseUrl = baseUrl.split('/v2')[0];
+    }
+  }
+  baseUrl = baseUrl.replace(/\/$/, '');
   const site = config.siteId || 'default';
 
   const pathsToTry = [
@@ -766,7 +802,27 @@ async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
     delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
   }
 
-  const baseUrl = config.url.replace(/\/$/, '');
+  let baseUrl = config.url.trim().replace(/\/$/, '');
+  try {
+    const parsedUrl = new URL(baseUrl);
+    baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+  } catch {
+    if (baseUrl.includes('/proxy/network')) {
+      baseUrl = baseUrl.split('/proxy/network')[0];
+    } else if (baseUrl.includes('/network')) {
+      baseUrl = baseUrl.split('/network')[0];
+    } else if (baseUrl.includes('/api/')) {
+      baseUrl = baseUrl.split('/api/')[0];
+    } else if (baseUrl.includes('/v1')) {
+      baseUrl = baseUrl.split('/v1')[0];
+    } else if (baseUrl.includes('/v2')) {
+      baseUrl = baseUrl.split('/v2')[0];
+    } else if (baseUrl.includes('/nms')) {
+      baseUrl = baseUrl.split('/nms')[0];
+    }
+  }
+  baseUrl = baseUrl.replace(/\/$/, '');
+
   const pathsToTry = [
     '/api/v1/devices',
     '/api/v1.0/devices',
@@ -779,6 +835,7 @@ async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
     '/api/v1/nms/devices',
     '/nms/api/v1/devices',
     '/nms/api/v1.0/devices',
+    '/nms/api/v2.1/devices',
     '/v1/devices'
   ];
 
@@ -877,7 +934,22 @@ async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
       id: `uisp-real-${dev.identification?.id || (dev.identification?.mac ? dev.identification.mac.replace(/:/g, '') : Math.random().toString(36).substr(2, 9))}`,
       name: dev.identification?.name || dev.identification?.model || 'UISP Device',
       type: 'uisp' as const,
-      category: (dev.identification?.category || (dev.identification?.model && dev.identification?.model.toLowerCase().includes('fiber') ? 'wireless' : 'router')) as any,
+      category: (() => {
+        let cat: 'router' | 'switch' | 'ap' | 'wireless' = 'router';
+        const rawCat = String(dev.identification?.category || '').toLowerCase();
+        const modelLower = String(dev.identification?.model || '').toLowerCase();
+        
+        if (rawCat === 'switch' || modelLower.includes('switch') || modelLower.includes('edgeswitch') || modelLower.includes('es-')) {
+          cat = 'switch';
+        } else if (rawCat === 'wireless' || rawCat === 'optical' || modelLower.includes('fiber') || modelLower.includes('gigabeam') || modelLower.includes('gbe') || modelLower.includes('nanostation') || modelLower.includes('powerbeam') || modelLower.includes('ltu') || modelLower.includes('airmax')) {
+          cat = 'wireless';
+        } else if (rawCat === 'ap' || modelLower.includes('unifi') || modelLower.includes('ap')) {
+          cat = 'ap';
+        } else {
+          cat = 'router';
+        }
+        return cat;
+      })(),
       model: dev.identification?.model || 'Unknown',
       status: (isOnline ? 'online' : 'offline') as any,
       ipAddress: dev.ipAddress || (dev.interfaces?.[0]?.addresses?.[0]?.split('/')?.[0]) || '0.0.0.0',
@@ -1043,7 +1115,7 @@ setInterval(() => {
 
 // --- REST API Endpoints ---
 
-// Get Devices (UniFi and UISP)
+/// Get Devices (UniFi and UISP)
 app.get('/api/devices', async (req, res) => {
   const unifiEnabled = state.apiConfig?.unifi?.enabled;
   const uispEnabled = state.apiConfig?.uisp?.enabled;
@@ -1075,7 +1147,14 @@ app.get('/api/devices', async (req, res) => {
           category: 'connection'
         });
       }
+      // Fallback to simulated UniFi devices on error
+      const simUnifi = state.devices.filter(d => d.type === 'unifi');
+      finalDevices.push(...simUnifi);
     }
+  } else {
+    // Fallback to simulated UniFi devices if not enabled
+    const simUnifi = state.devices.filter(d => d.type === 'unifi');
+    finalDevices.push(...simUnifi);
   }
 
   if (uispEnabled) {
@@ -1098,7 +1177,14 @@ app.get('/api/devices', async (req, res) => {
           category: 'connection'
         });
       }
+      // Fallback to simulated UISP devices on error
+      const simUisp = state.devices.filter(d => d.type === 'uisp');
+      finalDevices.push(...simUisp);
     }
+  } else {
+    // Fallback to simulated UISP devices if not enabled
+    const simUisp = state.devices.filter(d => d.type === 'uisp');
+    finalDevices.push(...simUisp);
   }
 
   res.json(finalDevices);
