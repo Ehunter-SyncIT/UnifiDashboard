@@ -40,7 +40,7 @@ export default function DeviceGrid({
   const [filterType, setFilterType] = React.useState<'all' | DeviceType>('all');
   const [filterCategory, setFilterCategory] = React.useState<'all' | DeviceCategory>('all');
   const [filterStatus, setFilterStatus] = React.useState<'all' | DeviceStatus>('all');
-  const [sortBy, setSortBy] = React.useState<'name' | 'ip' | 'mac' | 'status' | 'type'>('name');
+  const [sortBy, setSortBy] = React.useState<'name' | 'ip' | 'mac' | 'status' | 'type'>('ip');
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('asc');
   
   const [copiedId, setCopiedId] = React.useState<string | null>(null);

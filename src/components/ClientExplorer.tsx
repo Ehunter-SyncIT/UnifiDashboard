@@ -49,15 +49,15 @@ export default function ClientExplorer({
   const [editName, setEditName] = React.useState('');
 
   // Get unique lists for filter options
-  const vlans = Array.from(new Set(clients.map(c => c.vlanId.toString()))).sort();
-  const deviceTypes = Array.from(new Set(clients.map(c => c.deviceType))).sort();
+  const vlans = Array.from(new Set(clients.map(c => (c.vlanId !== undefined && c.vlanId !== null) ? c.vlanId.toString() : '1'))).sort();
+  const deviceTypes = Array.from(new Set(clients.map(c => c.deviceType || 'generic'))).sort();
 
   // Filter clients
   const filteredClients = clients.filter(client => {
     const matchesSearch = 
-      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.ipAddress.includes(searchTerm) ||
-      client.macAddress.toLowerCase().includes(searchTerm.toLowerCase());
+      (client.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (client.ipAddress || '').includes(searchTerm) ||
+      (client.macAddress || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesConnection = 
       connectionFilter === 'all' || 
@@ -65,11 +65,11 @@ export default function ClientExplorer({
 
     const matchesType = 
       typeFilter === 'all' || 
-      client.deviceType === typeFilter;
+      (client.deviceType || 'generic') === typeFilter;
 
     const matchesVlan = 
       vlanFilter === 'all' || 
-      client.vlanId.toString() === vlanFilter;
+      ((client.vlanId !== undefined && client.vlanId !== null) ? client.vlanId.toString() : '1') === vlanFilter;
 
     return matchesSearch && matchesConnection && matchesType && matchesVlan;
   });
