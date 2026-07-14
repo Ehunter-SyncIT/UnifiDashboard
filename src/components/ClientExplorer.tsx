@@ -223,7 +223,17 @@ export default function ClientExplorer({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50 text-xs">
-              {filteredClients.length === 0 ? (
+              {clients.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400 font-sans" id="clients-empty-state">
+                    <ShieldAlert className="h-8 w-8 text-slate-400 mx-auto mb-3 animate-pulse" />
+                    <h5 className="font-display font-semibold text-slate-800 dark:text-slate-200 text-sm">No Active Client Stations Found</h5>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mt-1.5 leading-relaxed">
+                      Please make sure your UniFi Controller or UISP Server integration is configured and active to stream connected client details in real-time.
+                    </p>
+                  </td>
+                </tr>
+              ) : filteredClients.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-slate-400 font-mono">
                     <ShieldAlert className="h-5 w-5 text-slate-400 mx-auto mb-2" />

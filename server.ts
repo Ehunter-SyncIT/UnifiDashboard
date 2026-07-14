@@ -1496,9 +1496,9 @@ app.get('/api/devices', async (req, res) => {
   const unifiEnabled = state.apiConfig?.unifi?.enabled;
   const uispEnabled = state.apiConfig?.uisp?.enabled;
   
-  // If no live integration is configured/enabled, return all simulated devices
+  // If no live integration is configured/enabled, return empty list
   if (!unifiEnabled && !uispEnabled) {
-    return res.json(state.devices);
+    return res.json([]);
   }
 
   let finalDevices: NetworkDevice[] = [];
@@ -1523,14 +1523,7 @@ app.get('/api/devices', async (req, res) => {
           category: 'connection'
         });
       }
-      // Fallback to simulated UniFi devices on error
-      const simUnifi = state.devices.filter(d => d.type === 'unifi');
-      finalDevices.push(...simUnifi);
     }
-  } else {
-    // Fallback to simulated UniFi devices if not enabled
-    const simUnifi = state.devices.filter(d => d.type === 'unifi');
-    finalDevices.push(...simUnifi);
   }
 
   if (uispEnabled) {
@@ -1553,14 +1546,7 @@ app.get('/api/devices', async (req, res) => {
           category: 'connection'
         });
       }
-      // Fallback to simulated UISP devices on error
-      const simUisp = state.devices.filter(d => d.type === 'uisp');
-      finalDevices.push(...simUisp);
     }
-  } else {
-    // Fallback to simulated UISP devices if not enabled
-    const simUisp = state.devices.filter(d => d.type === 'uisp');
-    finalDevices.push(...simUisp);
   }
 
   res.json(finalDevices);
@@ -1781,7 +1767,7 @@ app.get('/api/clients', async (req, res) => {
   const uispEnabled = state.apiConfig?.uisp?.enabled;
   
   if (!unifiEnabled && !uispEnabled) {
-    return res.json(state.clients);
+    return res.json([]);
   }
 
   try {
@@ -1802,45 +1788,10 @@ app.get('/api/clients', async (req, res) => {
     const [unifiClients, uispClients] = await Promise.all([unifiPromise, uispPromise]);
     const combined = [...unifiClients, ...uispClients];
 
-    if (combined && combined.length > 0) {
-      return res.json(combined);
-    }
-    
-    // Fallback to simulated clients if the live list is empty.
-    // Dynamically map the mock clients to the user's real online APs / switches if available!
-    try {
-      const realUnifiDevices = unifiEnabled ? await fetchRealUniFiDevices(state.apiConfig.unifi).catch(() => []) : [];
-      const realUispDevices = uispEnabled ? await fetchRealUISPDevices(state.apiConfig.uisp).catch(() => []) : [];
-      const allRealDevices = [...realUnifiDevices, ...realUispDevices];
-      
-      if (allRealDevices.length > 0) {
-        const realAPs = allRealDevices.filter(d => d.category === 'ap' && d.status === 'online');
-        const realSwitches = allRealDevices.filter(d => d.category === 'switch' && d.status === 'online');
-        
-        const mappedClients = state.clients.map((client, idx) => {
-          const newClient = { ...client };
-          if (client.connectionType === 'wifi' && realAPs.length > 0) {
-            const targetAP = realAPs[idx % realAPs.length];
-            newClient.apIdOrSwitchId = targetAP.id;
-            newClient.apOrSwitchName = targetAP.name;
-          } else if (client.connectionType === 'wired' && realSwitches.length > 0) {
-            const targetSwitch = realSwitches[idx % realSwitches.length];
-            newClient.apIdOrSwitchId = targetSwitch.id;
-            newClient.apOrSwitchName = targetSwitch.name;
-          }
-          return newClient;
-        });
-        return res.json(mappedClients);
-      }
-    } catch (e) {
-      console.error("Failed to map fallback clients:", e);
-    }
-    
-    return res.json(state.clients);
+    return res.json(combined);
   } catch (err: any) {
     console.error("Combined Live Clients Fetch Error:", err);
-    // Fallback to simulated clients on error
-    return res.json(state.clients);
+    return res.json([]);
   }
 });
 

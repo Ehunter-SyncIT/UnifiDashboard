@@ -238,22 +238,31 @@ export default function DeviceGrid({
 
       {/* Grid of Devices */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-        {sortedDevices.map(dev => {
-          const isUisp = dev.type === 'uisp';
-          const isRebooting = rebootingIds[dev.id];
-          
-          return (
-            <div 
-              key={dev.id}
-              id={`device-card-${dev.id}`}
-              className={`bg-white dark:bg-[#0f172a] border rounded-xl overflow-hidden shadow-xs transition-all duration-200 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 ${
-                dev.status === 'offline' 
-                  ? 'border-rose-500/40 bg-rose-500/5' 
-                  : dev.status === 'warning'
-                  ? 'border-amber-500/40 bg-amber-500/5'
-                  : 'border-slate-200 dark:border-slate-800'
-              }`}
-            >
+        {sortedDevices.length === 0 ? (
+          <div className="col-span-full py-12 flex flex-col items-center justify-center text-center p-6 bg-slate-50/50 dark:bg-slate-950/25 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-3" id="device-empty-state">
+            <AlertTriangle className="h-8 w-8 text-slate-400" />
+            <h5 className="font-display font-semibold text-slate-800 dark:text-slate-200 text-sm">No Active Network Devices Found</h5>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm font-sans leading-relaxed">
+              Please verify your UniFi or UISP controller integration status. If live integration is disabled, configure your API credentials in the NetOps control panel.
+            </p>
+          </div>
+        ) : (
+          sortedDevices.map(dev => {
+            const isUisp = dev.type === 'uisp';
+            const isRebooting = rebootingIds[dev.id];
+            
+            return (
+              <div 
+                key={dev.id}
+                id={`device-card-${dev.id}`}
+                className={`bg-white dark:bg-[#0f172a] border rounded-xl overflow-hidden shadow-xs transition-all duration-200 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 ${
+                  dev.status === 'offline' 
+                    ? 'border-rose-500/40 bg-rose-500/5' 
+                    : dev.status === 'warning'
+                    ? 'border-amber-500/40 bg-amber-500/5'
+                    : 'border-slate-200 dark:border-slate-800'
+                }`}
+              >
               {/* Card Header */}
               <div className="p-3.5 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/20">
                 <div className="flex justify-between items-start">
@@ -507,7 +516,8 @@ export default function DeviceGrid({
 
             </div>
           );
-        })}
+        })
+        )}
       </div>
 
       {/* Editing Dialog Modal */}

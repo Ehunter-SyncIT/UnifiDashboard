@@ -204,7 +204,7 @@ export default function TrafficCharts({ data, thresholdMbps }: TrafficChartsProp
                   <Area 
                     name="UniFi Download (Mbps)" 
                     type="monotone" 
-                    dataKey={(d) => d.unifiDownloadMbps ?? Math.round(d.downloadMbps * 0.55 * 10) / 10} 
+                    dataKey="unifiDownloadMbps" 
                     stroke={isCurrentSpike ? "#f43f5e" : "#10b981"} 
                     strokeWidth={1.5}
                     fillOpacity={1} 
@@ -213,7 +213,7 @@ export default function TrafficCharts({ data, thresholdMbps }: TrafficChartsProp
                   <Area 
                     name="UniFi Upload (Mbps)" 
                     type="monotone" 
-                    dataKey={(d) => d.unifiUploadMbps ?? Math.round(d.uploadMbps * 0.45 * 10) / 10} 
+                    dataKey="unifiUploadMbps" 
                     stroke="#3b82f6" 
                     strokeWidth={1.5}
                     fillOpacity={1} 
@@ -230,7 +230,7 @@ export default function TrafficCharts({ data, thresholdMbps }: TrafficChartsProp
                   <Line 
                     name="UniFi Ping (ms)" 
                     type="monotone" 
-                    dataKey={(d) => Math.round((d.latencyMs * 0.95) * 10) / 10} 
+                    dataKey="unifiLatencyMs" 
                     stroke="#6366f1" 
                     strokeWidth={1.5} 
                     dot={false}
@@ -260,7 +260,7 @@ export default function TrafficCharts({ data, thresholdMbps }: TrafficChartsProp
                   <Area 
                     name="UniFi Active Stations" 
                     type="monotone" 
-                    dataKey="activeClients" 
+                    dataKey="unifiActiveClients" 
                     stroke="#06b6d4" 
                     strokeWidth={1.5}
                     fillOpacity={1} 
@@ -306,7 +306,7 @@ export default function TrafficCharts({ data, thresholdMbps }: TrafficChartsProp
                   <Area 
                     name="UISP Download (Mbps)" 
                     type="monotone" 
-                    dataKey={(d) => d.uispDownloadMbps ?? Math.round(d.downloadMbps * 0.45 * 10) / 10} 
+                    dataKey="uispDownloadMbps" 
                     stroke="#f59e0b" 
                     strokeWidth={1.5}
                     fillOpacity={1} 
@@ -315,7 +315,7 @@ export default function TrafficCharts({ data, thresholdMbps }: TrafficChartsProp
                   <Area 
                     name="UISP Upload (Mbps)" 
                     type="monotone" 
-                    dataKey={(d) => d.uispUploadMbps ?? Math.round(d.uploadMbps * 0.55 * 10) / 10} 
+                    dataKey="uispUploadMbps" 
                     stroke="#ec4899" 
                     strokeWidth={1.5}
                     fillOpacity={1} 
@@ -332,7 +332,7 @@ export default function TrafficCharts({ data, thresholdMbps }: TrafficChartsProp
                   <Line 
                     name="UISP Bridge Ping (ms)" 
                     type="monotone" 
-                    dataKey={(d) => Math.round((d.latencyMs * 1.05) * 10) / 10} 
+                    dataKey="uispLatencyMs" 
                     stroke="#f59e0b" 
                     strokeWidth={1.5} 
                     dot={false}
@@ -362,7 +362,7 @@ export default function TrafficCharts({ data, thresholdMbps }: TrafficChartsProp
                   <Area 
                     name="UISP Subscriber Links" 
                     type="monotone" 
-                    dataKey={(d) => Math.max(2, Math.round(d.activeClients * 0.22))} 
+                    dataKey="uispActiveClients" 
                     stroke="#ec4899" 
                     strokeWidth={1.5}
                     fillOpacity={1} 
