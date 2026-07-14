@@ -53,6 +53,10 @@ export interface TrafficSnapshot {
   activeClients: number;
   latencyMs: number;
   packetLossPercent: number;
+  unifiDownloadMbps?: number;
+  unifiUploadMbps?: number;
+  uispDownloadMbps?: number;
+  uispUploadMbps?: number;
 }
 
 export interface Alert {

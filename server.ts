@@ -456,6 +456,105 @@ function saveApiConfig() {
 // Initial config loading
 loadApiConfig();
 
+function detectDeviceCategory(
+  type: 'unifi' | 'uisp',
+  rawCat: string,
+  model: string,
+  name: string
+): 'router' | 'switch' | 'ap' | 'wireless' {
+  const c = String(rawCat || '').toLowerCase();
+  const m = String(model || '').toLowerCase();
+  const n = String(name || '').toLowerCase();
+
+  // Explicit overrides if we have clear controller category
+  if (c === 'switch' || c === 'sw') return 'switch';
+  if (c === 'ap' || c === 'uap') return 'ap';
+  if (c === 'router' || c === 'gateway' || c === 'security-gateway') return 'router';
+  if (c === 'wireless' || c === 'station' || c === 'cpe') return 'wireless';
+
+  // 1. AP detection
+  if (
+    m.includes('unifi-ap') ||
+    m.includes('uap') ||
+    m.includes('u6-') ||
+    m.includes('-ap') ||
+    m === 'ap' ||
+    n.includes(' ap') ||
+    n.includes('ap ') ||
+    n.includes('unifi ap') ||
+    n.includes('access point')
+  ) {
+    return 'ap';
+  }
+
+  // 2. Wireless Bridge / Station detection
+  if (
+    m.includes('gigabeam') ||
+    m.includes('gbe') ||
+    m.includes('nanostation') ||
+    m.includes('powerbeam') ||
+    m.includes('ltu') ||
+    m.includes('airmax') ||
+    m.includes('rocket') ||
+    m.includes('wave') ||
+    m.includes('loco') ||
+    n.includes('bridge') ||
+    n.includes('backhaul') ||
+    n.includes('station') ||
+    n.includes('ptp') ||
+    n.includes('ptmp')
+  ) {
+    return 'wireless';
+  }
+
+  // 3. Switch detection (check if model/name indicates it is a switch, e.g. SW23, SW12, es-, usw)
+  if (
+    m.includes('switch') ||
+    m.includes('edgeswitch') ||
+    m.includes('es-') ||
+    m.includes('usw') ||
+    m.includes('us-') ||
+    n.includes('switch') ||
+    n.includes('edgeswitch') ||
+    n.startsWith('sw') ||
+    n.includes(' sw') ||
+    n.includes('usw') ||
+    n.includes('-sw-') ||
+    n.includes('distribution') ||
+    n.includes('access switch')
+  ) {
+    return 'switch';
+  }
+
+  // 4. Router/Gateway detection
+  if (
+    m.includes('router') ||
+    m.includes('gateway') ||
+    m.includes('udm') ||
+    m.includes('uxg') ||
+    m.includes('ugw') ||
+    m.includes('udg') ||
+    m.includes('dream') ||
+    m.includes('console') ||
+    n.includes('router') ||
+    n.includes('gateway') ||
+    n.includes('udm') ||
+    n.includes('dream') ||
+    n.includes('console') ||
+    n.includes('remt') ||
+    n.includes('security engine')
+  ) {
+    return 'router';
+  }
+
+  // Fallbacks
+  if (type === 'unifi') {
+    return 'switch';
+  } else {
+    return 'router';
+  }
+}
+
 async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   if (!config.enabled || !config.url) return [];
 
@@ -576,12 +675,7 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
         const stateStr = String(dev.state || '').toUpperCase();
         const isOnline = stateStr === 'ONLINE' || stateStr === 'CONNECTED' || (dev.uptime && dev.uptime > 0) || stateStr === 'UP';
         
-        let category: 'router' | 'switch' | 'ap' = 'switch';
-        if (dev.features?.accessPoint || (dev.model && dev.model.toLowerCase().includes('ap'))) {
-          category = 'ap';
-        } else if (dev.model && (dev.model.toLowerCase().includes('udm') || dev.model.toLowerCase().includes('router') || dev.model.toLowerCase().includes('gateway'))) {
-          category = 'router';
-        }
+        const category = detectDeviceCategory('unifi', dev.features?.accessPoint ? 'ap' : '', dev.model, dev.name || dev.model);
 
         const portsList = dev.interfaces?.ports || [];
         const ports = Array.isArray(portsList) ? portsList.map((p: any) => ({
@@ -613,17 +707,7 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
       } else {
         const isOnline = dev.state === 1 || dev.state === 'connected' || dev.state === true || (dev.uptime && dev.uptime > 0);
         
-        let category: 'router' | 'switch' | 'ap' = 'switch';
-        const typeStr = String(dev.type || '').toLowerCase();
-        const modelStr = String(dev.model || '').toLowerCase();
-        
-        if (typeStr === 'uap' || modelStr.includes('ap') || modelStr.includes('u6') || modelStr.includes('ac')) {
-          category = 'ap';
-        } else if (typeStr === 'usw' || modelStr.includes('switch') || modelStr.includes('us-')) {
-          category = 'switch';
-        } else if (typeStr === 'ugw' || typeStr === 'uxg' || typeStr === 'udg' || typeStr === 'udm' || modelStr.includes('udm') || modelStr.includes('router') || modelStr.includes('gateway')) {
-          category = 'router';
-        }
+        const category = detectDeviceCategory('unifi', dev.type, dev.model, dev.name || dev.model);
 
         const devIdSeed = dev.mac || 'unifi-legacy';
         const cpuVal = dev.sys_stats?.cpu ? Math.round(parseFloat(dev.sys_stats.cpu)) : (dev.cpu ? Math.round(parseFloat(dev.cpu)) : getDeterministicValue(devIdSeed, 8, 38, Math.floor(Date.now() / 15000)));
@@ -809,6 +893,129 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
   });
 }
 
+async function fetchRealUISPClients(config: any): Promise<any[]> {
+  if (!config.enabled || !config.url || !config.token) return [];
+
+  if (config.skipTls) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  } else {
+    delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  }
+
+  let baseUrl = config.url.trim().replace(/\/$/, '');
+  try {
+    const parsedUrl = new URL(baseUrl);
+    baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+  } catch {
+    if (baseUrl.includes('/proxy/network')) {
+      baseUrl = baseUrl.split('/proxy/network')[0];
+    } else if (baseUrl.includes('/network')) {
+      baseUrl = baseUrl.split('/network')[0];
+    } else if (baseUrl.includes('/api/')) {
+      baseUrl = baseUrl.split('/api/')[0];
+    } else if (baseUrl.includes('/v1')) {
+      baseUrl = baseUrl.split('/v1')[0];
+    } else if (baseUrl.includes('/v2')) {
+      baseUrl = baseUrl.split('/v2')[0];
+    } else if (baseUrl.includes('/nms')) {
+      baseUrl = baseUrl.split('/nms')[0];
+    }
+  }
+  baseUrl = baseUrl.replace(/\/$/, '');
+
+  const pathsToTry = [
+    '/api/v1/sites',
+    '/api/v1.0/sites',
+    '/api/v2.1/sites',
+    '/api/v1/nms/sites',
+    '/v1/sites'
+  ];
+
+  let sitesRes: any = null;
+  let parsedData: any = null;
+
+  for (const path of pathsToTry) {
+    try {
+      console.log(`[UISP Clients Sync] Trying endpoint: ${baseUrl}${path}`);
+      const res = await fetch(`${baseUrl}${path}`, {
+        headers: {
+          'X-Auth-Token': config.token,
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000
+      } as any);
+
+      const contentType = res.headers.get('content-type') || '';
+      if (res.status === 200 || res.status === 201) {
+        if (contentType.toLowerCase().includes('text/html')) {
+          continue;
+        }
+
+        try {
+          parsedData = await res.json();
+          sitesRes = res;
+          break;
+        } catch {
+          continue;
+        }
+      }
+    } catch (err: any) {
+      console.log(`[UISP Clients Sync] Error trying path ${path}: ${err.message}`);
+    }
+  }
+
+  if (!sitesRes || !parsedData) return [];
+
+  let rawSites: any[] = [];
+  if (Array.isArray(parsedData)) {
+    rawSites = parsedData;
+  } else if (parsedData && Array.isArray(parsedData.data)) {
+    rawSites = parsedData.data;
+  } else if (parsedData && typeof parsedData === 'object') {
+    const arrayVal = Object.values(parsedData).find(v => Array.isArray(v));
+    if (arrayVal) {
+      rawSites = arrayVal as any[];
+    }
+  }
+
+  // Filter for sites that act as clients/subscribers
+  const clientSites = rawSites.filter((site: any) => {
+    const typeStr = String(site.type || '').toLowerCase();
+    return typeStr === 'client' || typeStr === 'subscriber' || site.parent === null || site.parentId !== undefined;
+  });
+
+  console.log(`[UISP Clients Sync] Found ${clientSites.length} client sites out of ${rawSites.length} total sites`);
+
+  return clientSites.map((site: any) => {
+    const id = site.id || Math.random().toString(36).substr(2, 9);
+    const name = site.name || site.contactName || `UISP Client-${id.substring(0, 4).toUpperCase()}`;
+    const mac = site.mac || `fc:ec:da:${getDeterministicValue(id, 10, 99, 1)}:${getDeterministicValue(id, 10, 99, 2)}:${getDeterministicValue(id, 10, 99, 3)}`;
+    const ip = site.ipAddress || site.ip || `10.0.200.${getDeterministicValue(id, 10, 250, 4)}`;
+    const status = String(site.status || site.overview?.status || '').toLowerCase();
+    const isBlocked = status === 'suspended' || status === 'blocked' || status === 'inactive';
+
+    const idSeed = `uisp-client-${id}`;
+
+    return {
+      id: `client-real-uisp-${id.replace(/:/g, '')}`,
+      name,
+      ipAddress: ip,
+      macAddress: mac,
+      deviceType: 'laptop' as const,
+      apIdOrSwitchId: 'uisp-console',
+      apOrSwitchName: 'UISP Console',
+      connectionType: 'wired' as const,
+      vlanId: site.vlan !== undefined ? site.vlan : 1,
+      activityInMbps: isBlocked ? 0 : Math.round(getDeterministicValue(idSeed, 10, 350, Math.floor(Date.now() / 8000)) / 10),
+      activityOutMbps: isBlocked ? 0 : Math.round(getDeterministicValue(idSeed, 5, 80, Math.floor(Date.now() / 8000)) / 10),
+      totalDataDownloadedGb: Math.round(getDeterministicValue(idSeed, 100, 1500, 0) / 10),
+      totalDataUploadedGb: Math.round(getDeterministicValue(idSeed, 10, 300, 0) / 10),
+      uptimeSeconds: site.uptime || site.overview?.uptime || 86400,
+      isBlocked
+    };
+  });
+}
+
 async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
   if (!config.enabled || !config.url || !config.token) return [];
 
@@ -988,22 +1195,7 @@ async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
       id: idSeed,
       name,
       type: 'uisp' as const,
-      category: (() => {
-        let cat: 'router' | 'switch' | 'ap' | 'wireless' = 'router';
-        const rawCat = String(dev.identification?.category || dev.category || '').toLowerCase();
-        const modelLower = model.toLowerCase();
-        
-        if (rawCat === 'switch' || modelLower.includes('switch') || modelLower.includes('edgeswitch') || modelLower.includes('es-')) {
-          cat = 'switch';
-        } else if (rawCat === 'wireless' || rawCat === 'optical' || modelLower.includes('fiber') || modelLower.includes('gigabeam') || modelLower.includes('gbe') || modelLower.includes('nanostation') || modelLower.includes('powerbeam') || modelLower.includes('ltu') || modelLower.includes('airmax')) {
-          cat = 'wireless';
-        } else if (rawCat === 'ap' || modelLower.includes('unifi') || modelLower.includes('ap')) {
-          cat = 'ap';
-        } else {
-          cat = 'router';
-        }
-        return cat;
-      })(),
+      category: detectDeviceCategory('uisp', dev.identification?.category || dev.category, model, name),
       model,
       status,
       ipAddress,
@@ -1161,6 +1353,12 @@ setInterval(() => {
     c.uptimeSeconds += 10;
   });
 
+  // Distinct UniFi vs UISP baselines
+  const unifiDownload = download * 0.55 + (Math.sin(now.getTime() / 30000) * 15);
+  const unifiUpload = upload * 0.45 + (Math.cos(now.getTime() / 30000) * 5);
+  const uispDownload = download * 0.45 - (Math.sin(now.getTime() / 30000) * 15);
+  const uispUpload = upload * 0.55 - (Math.cos(now.getTime() / 30000) * 5);
+
   // Push to history and pop oldest
   state.analytics.push({
     timestamp: timeStr,
@@ -1168,7 +1366,11 @@ setInterval(() => {
     uploadMbps: Math.round(upload * 10) / 10,
     activeClients: clients,
     latencyMs: Math.round(latency * 10) / 10,
-    packetLossPercent: Math.round(packetLoss * 100) / 100
+    packetLossPercent: Math.round(packetLoss * 100) / 100,
+    unifiDownloadMbps: Math.max(5, Math.round(unifiDownload * 10) / 10),
+    unifiUploadMbps: Math.max(2, Math.round(unifiUpload * 10) / 10),
+    uispDownloadMbps: Math.max(5, Math.round(uispDownload * 10) / 10),
+    uispUploadMbps: Math.max(2, Math.round(uispUpload * 10) / 10)
   });
 
   if (state.analytics.length > 25) {
@@ -1465,20 +1667,38 @@ app.post('/api/alerts/clear', (req, res) => {
 // Get clients list
 app.get('/api/clients', async (req, res) => {
   const unifiEnabled = state.apiConfig?.unifi?.enabled;
+  const uispEnabled = state.apiConfig?.uisp?.enabled;
   
-  if (!unifiEnabled) {
+  if (!unifiEnabled && !uispEnabled) {
     return res.json(state.clients);
   }
 
   try {
-    const realClients = await fetchRealUniFiClients(state.apiConfig.unifi);
-    if (realClients && realClients.length > 0) {
-      return res.json(realClients);
+    const unifiPromise = unifiEnabled 
+      ? fetchRealUniFiClients(state.apiConfig.unifi).catch(err => {
+          console.error("UniFi Live Clients Fetch Error:", err);
+          return [];
+        })
+      : Promise.resolve([]);
+
+    const uispPromise = uispEnabled
+      ? fetchRealUISPClients(state.apiConfig.uisp).catch(err => {
+          console.error("UISP Live Clients Fetch Error:", err);
+          return [];
+        })
+      : Promise.resolve([]);
+
+    const [unifiClients, uispClients] = await Promise.all([unifiPromise, uispPromise]);
+    const combined = [...unifiClients, ...uispClients];
+
+    if (combined && combined.length > 0) {
+      return res.json(combined);
     }
+    
     // Fallback to simulated clients if the live list is empty
     return res.json(state.clients);
   } catch (err: any) {
-    console.error("UniFi Live Clients Fetch Error:", err);
+    console.error("Combined Live Clients Fetch Error:", err);
     // Fallback to simulated clients on error
     return res.json(state.clients);
   }
