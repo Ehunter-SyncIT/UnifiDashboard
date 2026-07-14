@@ -40,6 +40,8 @@ export default function DeviceGrid({
   const [filterType, setFilterType] = React.useState<'all' | DeviceType>('all');
   const [filterCategory, setFilterCategory] = React.useState<'all' | DeviceCategory>('all');
   const [filterStatus, setFilterStatus] = React.useState<'all' | DeviceStatus>('all');
+  const [sortBy, setSortBy] = React.useState<'name' | 'ip' | 'mac' | 'status' | 'type'>('name');
+  const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('asc');
   
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
   const [rebootingIds, setRebootingIds] = React.useState<Record<string, boolean>>({});
@@ -87,6 +89,43 @@ export default function DeviceGrid({
     const matchesStatus = filterStatus === 'all' || dev.status === filterStatus;
     
     return matchesSearch && matchesType && matchesCategory && matchesStatus;
+  });
+
+  // Sorting Logic
+  const sortedDevices = [...filteredDevices].sort((a, b) => {
+    let fieldA: any = '';
+    let fieldB: any = '';
+
+    switch (sortBy) {
+      case 'name':
+        fieldA = a.name.toLowerCase();
+        fieldB = b.name.toLowerCase();
+        break;
+      case 'ip':
+        // Pad IP segments with zeros for perfect numeric IP sorting
+        fieldA = a.ipAddress.split('.').map(num => num.padStart(3, '0')).join('.');
+        fieldB = b.ipAddress.split('.').map(num => num.padStart(3, '0')).join('.');
+        break;
+      case 'mac':
+        fieldA = a.macAddress.toLowerCase();
+        fieldB = b.macAddress.toLowerCase();
+        break;
+      case 'status':
+        fieldA = a.status;
+        fieldB = b.status;
+        break;
+      case 'type':
+        fieldA = a.type;
+        fieldB = b.type;
+        break;
+      default:
+        fieldA = a.name.toLowerCase();
+        fieldB = b.name.toLowerCase();
+    }
+
+    if (fieldA < fieldB) return sortOrder === 'asc' ? -1 : 1;
+    if (fieldA > fieldB) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
   });
 
   return (
@@ -169,6 +208,29 @@ export default function DeviceGrid({
               <option value="warning">Warning</option>
               <option value="offline">Offline</option>
             </select>
+
+            {/* Sort Dropdown */}
+            <div className="flex items-center space-x-1 pl-1 border-l border-slate-200 dark:border-slate-800">
+              <span className="text-slate-400 font-medium">Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="px-2 py-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded text-slate-700 dark:text-slate-300 font-medium focus:outline-none focus:ring-1 focus:ring-brand"
+              >
+                <option value="name">Name</option>
+                <option value="ip">IP Address</option>
+                <option value="mac">MAC Address</option>
+                <option value="status">Status</option>
+                <option value="type">System Type</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                className="p-1 px-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
+                title={`Order: ${sortOrder === 'asc' ? 'Ascending' : 'Descending'}`}
+              >
+                {sortOrder === 'asc' ? '▲' : '▼'}
+              </button>
+            </div>
           </div>
 
         </div>
@@ -176,7 +238,7 @@ export default function DeviceGrid({
 
       {/* Grid of Devices */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-        {filteredDevices.map(dev => {
+        {sortedDevices.map(dev => {
           const isUisp = dev.type === 'uisp';
           const isRebooting = rebootingIds[dev.id];
           

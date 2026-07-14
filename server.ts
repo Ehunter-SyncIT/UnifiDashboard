@@ -267,19 +267,7 @@ const state = {
 
   analytics: [] as TrafficSnapshot[],
   
-  alerts: [
-    {
-      id: 'alert-init-1',
-      timestamp: new Date(Date.now() - 3600000 * 4).toISOString(), // 4 hours ago
-      severity: 'warning',
-      deviceId: 'uisp-airfiber-master',
-      deviceName: 'Tower 1 airFiber Backhaul',
-      title: 'Poor Signal Strength',
-      message: 'airFiber Link signal strength degraded to -68 dBm (Expected: -60 dBm). Multi-path interference or heavy rain fade detected.',
-      acknowledged: false,
-      category: 'connection'
-    }
-  ] as Alert[],
+  alerts: [] as Alert[],
 
   clients: [
     {
@@ -555,6 +543,26 @@ function detectDeviceCategory(
   }
 }
 
+function getDeterministicPoeBudget(model: string): number {
+  const m = String(model || '').toLowerCase();
+  if (m.includes('8-150w')) return 150;
+  if (m.includes('16-150w')) return 150;
+  if (m.includes('24-250w')) return 250;
+  if (m.includes('24-500w')) return 500;
+  if (m.includes('48-500w')) return 500;
+  if (m.includes('48-750w')) return 750;
+  if (m.includes('pro-24-poe') || m.includes('pro-24') || m.includes('enterprise-24')) return 400;
+  if (m.includes('pro-48-poe') || m.includes('pro-48')) return 600;
+  if (m.includes('enterprise-48')) return 720;
+  if (m.includes('lite-8') || m.includes('8-poe')) return 52;
+  if (m.includes('lite-16')) return 45;
+  if (m.includes('sw-24') || m.includes('usw-24-poe')) return 95;
+  if (m.includes('sw-48') || m.includes('usw-48-poe')) return 195;
+  if (m.includes('udm-se') || m.includes('dream machine se') || m.includes('udmprose')) return 180;
+  if (m.includes('poe')) return 120; // safe fallback for generic poe switches
+  return 0;
+}
+
 async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   if (!config.enabled || !config.url) return [];
 
@@ -686,6 +694,9 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
           isConnected: p.state === 'UP' || false
         })) : [];
 
+        const poeBudgetTotalW = getDeterministicPoeBudget(dev.model);
+        const poeBudgetUsedW = ports.reduce((sum: number, p: any) => sum + (p.poePowerW || 0), 0);
+
         return {
           id: `unifi-real-${dev.id || (dev.macAddress ? dev.macAddress.replace(/:/g, '') : Math.random().toString(36).substr(2, 9))}`,
           name: dev.name || dev.model || 'UniFi Device',
@@ -702,7 +713,9 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
           bandwidthOutMbps: isOnline ? (dev.rxBytesRealtime ? Math.round((dev.rxBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (dev['rx_bytes-r'] ? Math.round((dev['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : getDeterministicValue(`unifi-${dev.id || dev.macAddress}`, 5, 30, Math.floor(Date.now() / 8000)) / 10)) : 0,
           uptimeSeconds: dev.uptime || dev.uptimeSeconds || 0,
           alertsCount: dev.alerts_count || 0,
-          ports
+          ports,
+          poeBudgetTotalW,
+          poeBudgetUsedW
         };
       } else {
         const isOnline = dev.state === 1 || dev.state === 'connected' || dev.state === true || (dev.uptime && dev.uptime > 0);
@@ -714,6 +727,17 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
         const ramVal = dev.sys_stats?.mem ? Math.round(parseFloat(dev.sys_stats.mem)) : (dev.ram ? Math.round(parseFloat(dev.ram)) : getDeterministicValue(devIdSeed, 25, 68, Math.floor(Date.now() / 45000)));
         const txVal = dev['tx_bytes-r'] ? Math.round((dev['tx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : (dev.txBytesRealtime ? Math.round((dev.txBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : getDeterministicValue(devIdSeed, 15, 80, Math.floor(Date.now() / 8000)) / 10);
         const rxVal = dev['rx_bytes-r'] ? Math.round((dev['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : (dev.rxBytesRealtime ? Math.round((dev.rxBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : getDeterministicValue(devIdSeed, 5, 30, Math.floor(Date.now() / 8000)) / 10);
+
+        const portsList = Array.isArray(dev.port_table) ? dev.port_table.map((p: any) => ({
+          portNumber: p.port_idx,
+          speedMbps: p.speed || 1000,
+          poeActive: p.enable_poe || false,
+          poePowerW: p.poe_power ? parseFloat(p.poe_power) : 0,
+          isConnected: p.up || false
+        })) : [];
+
+        const poeBudgetTotalW = getDeterministicPoeBudget(dev.model);
+        const poeBudgetUsedW = portsList.reduce((sum: number, p: any) => sum + (p.poePowerW || 0), 0);
 
         return {
           id: `unifi-real-${dev.mac ? dev.mac.replace(/:/g, '') : Math.random().toString(36).substr(2, 9)}`,
@@ -731,13 +755,9 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
           bandwidthOutMbps: isOnline ? rxVal : 0,
           uptimeSeconds: dev.uptime || 0,
           alertsCount: dev.alerts_count || 0,
-          ports: Array.isArray(dev.port_table) ? dev.port_table.map((p: any) => ({
-            portNumber: p.port_idx,
-            speedMbps: p.speed || 1000,
-            poeActive: p.enable_poe || false,
-            poePowerW: p.poe_power ? parseFloat(p.poe_power) : 0,
-            isConnected: p.up || false
-          })) : []
+          ports: portsList,
+          poeBudgetTotalW,
+          poeBudgetUsedW
         };
       }
     });
@@ -793,8 +813,10 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
       console.log(`[UniFi Client Sync] Trying endpoint: ${baseUrl}${path}`);
       const res = await fetch(`${baseUrl}${path}`, {
         headers: {
-          'X-API-KEY': config.apiKey,
-          'Content-Type': 'application/json'
+          'X-API-Key': config.apiKey || '',
+          'X-API-KEY': config.apiKey || '',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         timeout: 5000
       } as any);
@@ -867,9 +889,10 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
       deviceType = 'iot';
     }
 
-    const isWifi = client.is_wired === false || client.essid !== undefined || client.ap_mac !== undefined || client.channel !== undefined;
-    const apIdOrSwitchId = client.ap_mac || client.switch_mac || 'unifi-sw-ent-24';
-    const apOrSwitchName = client.ap_name || client.switch_name || (isWifi ? 'Office AP Enterprise' : 'Main Distribution Switch');
+    const isWired = client.isWired === true || client.is_wired === true;
+    const isWifi = !isWired;
+    const apIdOrSwitchId = client.apMac || client.ap_mac || client.switchMac || client.switch_mac || 'unifi-sw-ent-24';
+    const apOrSwitchName = client.apName || client.ap_name || client.switchName || client.switch_name || (isWifi ? 'Office AP Enterprise' : 'Main Distribution Switch');
 
     return {
       id: `client-real-${mac.replace(/:/g, '')}`,
@@ -882,11 +905,11 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
       connectionType: isWifi ? 'wifi' : 'wired',
       wifiBand: isWifi ? (client.channel && client.channel > 14 ? '5GHz' : '2.4GHz') : undefined,
       signalStrengthDbm: isWifi ? (client.rssi ? -Math.abs(client.rssi) : -62) : undefined,
-      vlanId: client.vlan !== undefined ? client.vlan : 1,
-      activityInMbps: client['tx_bytes-r'] ? Math.round((client['tx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 4 * 10) / 10,
-      activityOutMbps: client['rx_bytes-r'] ? Math.round((client['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 1.5 * 10) / 10,
-      totalDataDownloadedGb: client.tx_bytes ? Math.round((client.tx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 80 * 100) / 100,
-      totalDataUploadedGb: client.rx_bytes ? Math.round((client.rx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 15 * 100) / 100,
+      vlanId: client.vlanId !== undefined ? client.vlanId : (client.vlan !== undefined ? client.vlan : 1),
+      activityInMbps: client.txBytesRealtime !== undefined ? Math.round((client.txBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (client['tx_bytes-r'] ? Math.round((client['tx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 4 * 10) / 10),
+      activityOutMbps: client.rxBytesRealtime !== undefined ? Math.round((client.rxBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (client['rx_bytes-r'] ? Math.round((client['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 1.5 * 10) / 10),
+      totalDataDownloadedGb: client.txBytes !== undefined ? Math.round((client.txBytes / (1024 * 1024 * 1024)) * 100) / 100 : (client.tx_bytes ? Math.round((client.tx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 80 * 100) / 100),
+      totalDataUploadedGb: client.rxBytes !== undefined ? Math.round((client.rxBytes / (1024 * 1024 * 1024)) * 100) / 100 : (client.rx_bytes ? Math.round((client.rx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 15 * 100) / 100),
       uptimeSeconds: client.uptime || 3600,
       isBlocked: client.blocked || false
     };
@@ -1695,7 +1718,36 @@ app.get('/api/clients', async (req, res) => {
       return res.json(combined);
     }
     
-    // Fallback to simulated clients if the live list is empty
+    // Fallback to simulated clients if the live list is empty.
+    // Dynamically map the mock clients to the user's real online APs / switches if available!
+    try {
+      const realUnifiDevices = unifiEnabled ? await fetchRealUniFiDevices(state.apiConfig.unifi).catch(() => []) : [];
+      const realUispDevices = uispEnabled ? await fetchRealUISPDevices(state.apiConfig.uisp).catch(() => []) : [];
+      const allRealDevices = [...realUnifiDevices, ...realUispDevices];
+      
+      if (allRealDevices.length > 0) {
+        const realAPs = allRealDevices.filter(d => d.category === 'ap' && d.status === 'online');
+        const realSwitches = allRealDevices.filter(d => d.category === 'switch' && d.status === 'online');
+        
+        const mappedClients = state.clients.map((client, idx) => {
+          const newClient = { ...client };
+          if (client.connectionType === 'wifi' && realAPs.length > 0) {
+            const targetAP = realAPs[idx % realAPs.length];
+            newClient.apIdOrSwitchId = targetAP.id;
+            newClient.apOrSwitchName = targetAP.name;
+          } else if (client.connectionType === 'wired' && realSwitches.length > 0) {
+            const targetSwitch = realSwitches[idx % realSwitches.length];
+            newClient.apIdOrSwitchId = targetSwitch.id;
+            newClient.apOrSwitchName = targetSwitch.name;
+          }
+          return newClient;
+        });
+        return res.json(mappedClients);
+      }
+    } catch (e) {
+      console.error("Failed to map fallback clients:", e);
+    }
+    
     return res.json(state.clients);
   } catch (err: any) {
     console.error("Combined Live Clients Fetch Error:", err);

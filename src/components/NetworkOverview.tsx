@@ -69,13 +69,14 @@ export default function NetworkOverview({
   const aps = devices.filter(d => d.category === 'ap');
   const wireless = devices.filter(d => d.category === 'wireless');
 
-  // Switch Details
+  // Switch Details & PoE Sourcing (Aggregated from all PoE-capable devices including switches and UDM SE)
   const totalSwitches = switches.length;
   const onlineSwitches = switches.filter(s => s.status === 'online').length;
-  const totalPoeBudget = switches.reduce((acc, s) => acc + (s.poeBudgetTotalW || 0), 0);
-  const usedPoeBudget = switches.reduce((acc, s) => acc + (s.poeBudgetUsedW || 0), 0);
-  const activePoePorts = switches.reduce((acc, s) => {
-    const ports = s.ports || [];
+  const poeDevices = devices.filter(d => (d.poeBudgetTotalW && d.poeBudgetTotalW > 0) || (d.ports && d.ports.some(p => p.poeActive)));
+  const totalPoeBudget = poeDevices.reduce((acc, d) => acc + (d.poeBudgetTotalW || 0), 0);
+  const usedPoeBudget = poeDevices.reduce((acc, d) => acc + (d.poeBudgetUsedW || 0), 0);
+  const activePoePorts = poeDevices.reduce((acc, d) => {
+    const ports = d.ports || [];
     return acc + ports.filter(p => p.poeActive && p.isConnected).length;
   }, 0);
 
