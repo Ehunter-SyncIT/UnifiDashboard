@@ -73,8 +73,33 @@ export default function NetworkOverview({
   const totalSwitches = switches.length;
   const onlineSwitches = switches.filter(s => s.status === 'online').length;
   const poeDevices = devices.filter(d => (d.poeBudgetTotalW && d.poeBudgetTotalW > 0) || (d.ports && d.ports.some(p => p.poeActive)));
-  const totalPoeBudget = poeDevices.reduce((acc, d) => acc + (d.poeBudgetTotalW || 0), 0);
-  const usedPoeBudget = poeDevices.reduce((acc, d) => acc + (d.poeBudgetUsedW || 0), 0);
+  
+  const totalPoeBudget = poeDevices.reduce((acc, d) => {
+    if (d.poeBudgetTotalW !== undefined && d.poeBudgetTotalW > 0) {
+      return acc + d.poeBudgetTotalW;
+    }
+    // Fallback if not specified but has ports with PoE
+    const model = String(d.model || '').toLowerCase();
+    if (model.includes('udm-se') || model.includes('se')) return 180;
+    if (model.includes('pro-24') || model.includes('enterprise-24')) return 400;
+    if (model.includes('pro-48') || model.includes('enterprise-48')) return 600;
+    if (model.includes('24-poe') || model.includes('sw-24')) return 95;
+    if (model.includes('48-poe') || model.includes('sw-48')) return 195;
+    if (model.includes('8-poe') || model.includes('lite-8') || model.includes('ultra')) return 52;
+    if (model.includes('16-poe') || model.includes('lite-16')) return 45;
+    if (model.includes('flex')) return 46;
+    return (d.ports && d.ports.some(p => p.poeActive)) ? 120 : 0;
+  }, 0);
+
+  const usedPoeBudget = poeDevices.reduce((acc, d) => {
+    if (d.poeBudgetUsedW !== undefined && d.poeBudgetUsedW > 0) {
+      return acc + d.poeBudgetUsedW;
+    }
+    // Fallback to sum of ports
+    const portSum = (d.ports || []).reduce((sum, p) => sum + (p.poePowerW || 0), 0);
+    return acc + portSum;
+  }, 0);
+
   const activePoePorts = poeDevices.reduce((acc, d) => {
     const ports = d.ports || [];
     return acc + ports.filter(p => p.poeActive && p.isConnected).length;

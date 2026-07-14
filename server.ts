@@ -100,6 +100,8 @@ const state = {
       bandwidthOutMbps: 35.8,
       uptimeSeconds: 1209600, // 14 days
       alertsCount: 0,
+      poeBudgetTotalW: 180,
+      poeBudgetUsedW: 19.2,
       ports: [
         { portNumber: 1, speedMbps: 10000, poeActive: false, isConnected: true }, // WAN (SFP+)
         { portNumber: 2, speedMbps: 2500, poeActive: false, isConnected: true },  // WAN (RJ45)
@@ -592,11 +594,54 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   baseUrl = baseUrl.replace(/\/$/, '');
 
   const site = config.siteId || 'default';
+
+  // Resolve site to UUID if using modern v1 API
+  let resolvedSiteUuid = site;
+  try {
+    console.log(`[UniFi Sync] Attempting to resolve site UUID for: ${site}`);
+    let sitesRes = await fetch(`${baseUrl}/v1/sites`, {
+      headers: {
+        'X-API-Key': config.apiKey || '',
+        'Accept': 'application/json'
+      }
+    } as any).catch(() => null);
+
+    if (!sitesRes || !sitesRes.ok) {
+      sitesRes = await fetch(`${baseUrl}/api/v1/sites`, {
+        headers: {
+          'X-API-Key': config.apiKey || '',
+          'Accept': 'application/json'
+        }
+      } as any).catch(() => null);
+    }
+
+    if (sitesRes && sitesRes.ok) {
+      const sitesData: any = await sitesRes.json().catch(() => null);
+      if (sitesData && Array.isArray(sitesData.data)) {
+        const matched = sitesData.data.find((s: any) => 
+          String(s.name).toLowerCase() === site.toLowerCase() || 
+          String(s.internalReference).toLowerCase() === site.toLowerCase() ||
+          String(s.id).toLowerCase() === site.toLowerCase()
+        );
+        if (matched && matched.id) {
+          resolvedSiteUuid = matched.id;
+          console.log(`[UniFi Sync] Resolved site '${site}' to UUID: ${resolvedSiteUuid}`);
+        } else if (sitesData.data.length > 0) {
+          resolvedSiteUuid = sitesData.data[0].id;
+          console.log(`[UniFi Sync] No direct site match, using first available site UUID: ${resolvedSiteUuid}`);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.log(`[UniFi Sync] Site UUID resolution failed: ${err.message}`);
+  }
   
-  // Try endpoints for both modern UniFi Local API, UniFi OS, and self-hosted/legacy controllers
+  // Try endpoints for both modern UniFi Local API (UUID-based), UniFi OS (site-independent), and self-hosted/legacy controllers
   const pathsToTry = [
-    `/api/v1/sites/${site}/devices`,
-    `/v1/sites/${site}/devices`,
+    `/api/v1/sites/${resolvedSiteUuid}/devices`,
+    `/v1/sites/${resolvedSiteUuid}/devices`,
+    `/api/v1/devices`,
+    `/v1/devices`,
     `/proxy/network/api/s/${site}/stat/device`,
     `/api/s/${site}/stat/device`,
     `/network/api/s/${site}/stat/device`
@@ -795,9 +840,52 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
   baseUrl = baseUrl.replace(/\/$/, '');
   const site = config.siteId || 'default';
 
+  // Resolve site to UUID if using modern v1 API
+  let resolvedSiteUuid = site;
+  try {
+    console.log(`[UniFi Client Sync] Attempting to resolve site UUID for: ${site}`);
+    let sitesRes = await fetch(`${baseUrl}/v1/sites`, {
+      headers: {
+        'X-API-Key': config.apiKey || '',
+        'Accept': 'application/json'
+      }
+    } as any).catch(() => null);
+
+    if (!sitesRes || !sitesRes.ok) {
+      sitesRes = await fetch(`${baseUrl}/api/v1/sites`, {
+        headers: {
+          'X-API-Key': config.apiKey || '',
+          'Accept': 'application/json'
+        }
+      } as any).catch(() => null);
+    }
+
+    if (sitesRes && sitesRes.ok) {
+      const sitesData: any = await sitesRes.json().catch(() => null);
+      if (sitesData && Array.isArray(sitesData.data)) {
+        const matched = sitesData.data.find((s: any) => 
+          String(s.name).toLowerCase() === site.toLowerCase() || 
+          String(s.internalReference).toLowerCase() === site.toLowerCase() ||
+          String(s.id).toLowerCase() === site.toLowerCase()
+        );
+        if (matched && matched.id) {
+          resolvedSiteUuid = matched.id;
+          console.log(`[UniFi Client Sync] Resolved site '${site}' to UUID: ${resolvedSiteUuid}`);
+        } else if (sitesData.data.length > 0) {
+          resolvedSiteUuid = sitesData.data[0].id;
+          console.log(`[UniFi Client Sync] No direct site match, using first available site UUID: ${resolvedSiteUuid}`);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.log(`[UniFi Client Sync] Site UUID resolution failed: ${err.message}`);
+  }
+
   const pathsToTry = [
-    `/api/v1/sites/${site}/clients`,
-    `/v1/sites/${site}/clients`,
+    `/api/v1/sites/${resolvedSiteUuid}/clients`,
+    `/v1/sites/${resolvedSiteUuid}/clients`,
+    `/api/v1/clients`,
+    `/v1/clients`,
     `/proxy/network/api/s/${site}/stat/sta`,
     `/api/s/${site}/stat/sta`,
     `/network/api/s/${site}/stat/sta`
@@ -889,10 +977,10 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
       deviceType = 'iot';
     }
 
-    const isWired = client.isWired === true || client.is_wired === true;
+    const isWired = client.isWired === true || client.is_wired === true || client.type === 'WIRED' || String(client.connectionType).toLowerCase() === 'wired';
     const isWifi = !isWired;
-    const apIdOrSwitchId = client.apMac || client.ap_mac || client.switchMac || client.switch_mac || 'unifi-sw-ent-24';
-    const apOrSwitchName = client.apName || client.ap_name || client.switchName || client.switch_name || (isWifi ? 'Office AP Enterprise' : 'Main Distribution Switch');
+    const apIdOrSwitchId = client.apMac || client.ap_mac || client.switchMac || client.switch_mac || client.uplinkMac || client.uplinkDeviceMac || 'unifi-sw-ent-24';
+    const apOrSwitchName = client.apName || client.ap_name || client.switchName || client.switch_name || client.uplinkName || client.uplinkDeviceName || (isWifi ? 'Office AP Enterprise' : 'Main Distribution Switch');
 
     return {
       id: `client-real-${mac.replace(/:/g, '')}`,
