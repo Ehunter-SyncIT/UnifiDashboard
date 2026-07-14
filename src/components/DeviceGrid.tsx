@@ -28,15 +28,13 @@ interface DeviceGridProps {
   onRestart: (id: string) => Promise<void>;
   onDisconnect: (id: string) => Promise<void>;
   onConfigure: (id: string, name: string, ip: string) => Promise<void>;
-  onAnalyzeWithGemini: (device: NetworkDevice) => void;
 }
 
 export default function DeviceGrid({
   devices,
   onRestart,
   onDisconnect,
-  onConfigure,
-  onAnalyzeWithGemini
+  onConfigure
 }: DeviceGridProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [filterType, setFilterType] = React.useState<'all' | DeviceType>('all');
@@ -439,13 +437,7 @@ export default function DeviceGrid({
                     {isRebooting ? 'Rebooting...' : 'Reboot'}
                   </button>
 
-                  {/* Analyze with Gemini Button */}
-                  <button
-                    onClick={() => onAnalyzeWithGemini(dev)}
-                    className="px-2.5 py-1 text-[11px] font-bold font-display rounded text-white bg-brand hover:bg-brand-hover dark:bg-brand-light dark:hover:bg-brand shadow-xs flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Terminal className="h-3 w-3" /> AI NetOps
-                  </button>
+
 
                 </div>
 

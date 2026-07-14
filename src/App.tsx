@@ -6,7 +6,6 @@
 import React from 'react';
 import Header from './components/Header.jsx';
 import DeviceGrid from './components/DeviceGrid.jsx';
-import GeminiNetOps from './components/GeminiNetOps.jsx';
 import ApiSettingsModal from './components/ApiSettingsModal.jsx';
 import NetworkOverview from './components/NetworkOverview.jsx';
 import ClientExplorer from './components/ClientExplorer.jsx';
@@ -179,17 +178,7 @@ export default function App() {
     }
   };
 
-  const handleDeepLinkGemini = (device: NetworkDevice) => {
-    setSelectedDevice(device);
-    setActivePage('nodes');
-    // Use timeout to let the page switch before scrolling
-    setTimeout(() => {
-      const copilotEl = document.getElementById('gemini-ai-copilot');
-      if (copilotEl) {
-        copilotEl.scrollIntoView({ behavior: 'smooth' });
-      }
-    }, 100);
-  };
+
 
   const handleRenameClient = async (id: string, name: string) => {
     try {
@@ -349,24 +338,6 @@ export default function App() {
                   onRestart={handleRestartDevice}
                   onDisconnect={handleDisconnectDevice}
                   onConfigure={handleConfigureDevice}
-                  onAnalyzeWithGemini={handleDeepLinkGemini}
-                />
-              </div>
-
-              {/* Gemini AI NetOps diagnostic and alignment assistant */}
-              <div className="space-y-3 pt-2">
-                <div className="border-b border-slate-200 dark:border-slate-800 pb-1.5">
-                  <h2 className="text-sm sm:text-base font-bold font-display text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                    <Terminal className="h-4.5 w-4.5 text-indigo-500" />
-                    Autonomous AI Diagnostic Copilot
-                  </h2>
-                </div>
-                
-                <GeminiNetOps
-                  devices={devices}
-                  alerts={alerts}
-                  selectedDevice={selectedDevice}
-                  setSelectedDevice={setSelectedDevice}
                 />
               </div>
             </div>

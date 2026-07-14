@@ -110,11 +110,6 @@ export default function Header({
             >
               {darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}
             </button>
-            
-            <div className="hidden md:flex flex-col items-end text-[10px] font-mono leading-tight">
-              <span className="text-slate-400">OPERATOR</span>
-              <span className="text-slate-600 dark:text-slate-300 font-bold">ehsyncit@gmail.com</span>
-            </div>
           </div>
 
         </div>
