@@ -335,7 +335,7 @@ export default function ApiHistoryModal({ isOpen, onClose }: ApiHistoryModalProp
                                 </span>
                                 <span>•</span>
                                 <span className="truncate max-w-[200px]">
-                                  {log.statusText || 'Error Connecting'}
+                                  {log.statusText || (hasSuccess ? 'OK' : 'Error Connecting')}
                                 </span>
                               </div>
 
@@ -390,7 +390,7 @@ export default function ApiHistoryModal({ isOpen, onClose }: ApiHistoryModalProp
                           <div className="bg-[#0f172a]/40 p-2 border border-slate-800/60 rounded">
                             <span className="text-slate-500 block mb-0.5">Response State</span>
                             <span className={`font-bold ${activeLog.status >= 200 && activeLog.status < 300 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              HTTP {activeLog.status} ({activeLog.statusText})
+                              HTTP {activeLog.status} ({activeLog.statusText || (activeLog.status >= 200 && activeLog.status < 300 ? 'OK' : 'Error')})
                             </span>
                           </div>
                           <div className="bg-[#0f172a]/40 p-2 border border-slate-800/60 rounded col-span-2">

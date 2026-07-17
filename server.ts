@@ -617,18 +617,31 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
 
     if (sitesRes && sitesRes.ok) {
       const sitesData: any = await sitesRes.json().catch(() => null);
-      if (sitesData && Array.isArray(sitesData.data)) {
-        const matched = sitesData.data.find((s: any) => 
-          String(s.name).toLowerCase() === site.toLowerCase() || 
-          String(s.internalReference).toLowerCase() === site.toLowerCase() ||
-          String(s.id).toLowerCase() === site.toLowerCase()
+      let rawSites: any[] = [];
+      if (Array.isArray(sitesData)) {
+        rawSites = sitesData;
+      } else if (sitesData && Array.isArray(sitesData.data)) {
+        rawSites = sitesData.data;
+      } else if (sitesData && typeof sitesData === 'object') {
+        const arrayVal = Object.values(sitesData).find(v => Array.isArray(v));
+        if (arrayVal) {
+          rawSites = arrayVal as any[];
+        }
+      }
+
+      if (rawSites.length > 0) {
+        const matched = rawSites.find((s: any) => 
+          String(s.name || '').toLowerCase() === site.toLowerCase() || 
+          String(s.internalReference || '').toLowerCase() === site.toLowerCase() ||
+          String(s.id || '').toLowerCase() === site.toLowerCase() ||
+          String(s.description || '').toLowerCase() === site.toLowerCase()
         );
-        if (matched && matched.id) {
-          resolvedSiteUuid = matched.id;
-          console.log(`[UniFi Sync] Resolved site '${site}' to UUID: ${resolvedSiteUuid}`);
-        } else if (sitesData.data.length > 0) {
-          resolvedSiteUuid = sitesData.data[0].id;
-          console.log(`[UniFi Sync] No direct site match, using first available site UUID: ${resolvedSiteUuid}`);
+        if (matched) {
+          resolvedSiteUuid = matched.id || matched.name || site;
+          console.log(`[UniFi Sync] Resolved site '${site}' to: ${resolvedSiteUuid}`);
+        } else {
+          resolvedSiteUuid = rawSites[0].id || rawSites[0].name || site;
+          console.log(`[UniFi Sync] No direct site match, using first available site: ${resolvedSiteUuid}`);
         }
       }
     }
@@ -663,7 +676,7 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
         }
       });
       
-      if (res.status !== 404) {
+      if (res.ok) {
         // Ensure content-type is json if present
         const contentType = res.headers.get('content-type') || '';
         if (contentType.toLowerCase().includes('text/html')) {
@@ -682,7 +695,7 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
           continue;
         }
       } else {
-        console.log(`[UniFi Sync] Path returned 404: ${path}`);
+        console.log(`[UniFi Sync] Path returned error status ${res.status}: ${path}`);
       }
     } catch (err: any) {
       console.log(`[UniFi Sync] Path failed with error: ${path} (${err.message})`);
@@ -878,18 +891,31 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
 
     if (sitesRes && sitesRes.ok) {
       const sitesData: any = await sitesRes.json().catch(() => null);
-      if (sitesData && Array.isArray(sitesData.data)) {
-        const matched = sitesData.data.find((s: any) => 
-          String(s.name).toLowerCase() === site.toLowerCase() || 
-          String(s.internalReference).toLowerCase() === site.toLowerCase() ||
-          String(s.id).toLowerCase() === site.toLowerCase()
+      let rawSites: any[] = [];
+      if (Array.isArray(sitesData)) {
+        rawSites = sitesData;
+      } else if (sitesData && Array.isArray(sitesData.data)) {
+        rawSites = sitesData.data;
+      } else if (sitesData && typeof sitesData === 'object') {
+        const arrayVal = Object.values(sitesData).find(v => Array.isArray(v));
+        if (arrayVal) {
+          rawSites = arrayVal as any[];
+        }
+      }
+
+      if (rawSites.length > 0) {
+        const matched = rawSites.find((s: any) => 
+          String(s.name || '').toLowerCase() === site.toLowerCase() || 
+          String(s.internalReference || '').toLowerCase() === site.toLowerCase() ||
+          String(s.id || '').toLowerCase() === site.toLowerCase() ||
+          String(s.description || '').toLowerCase() === site.toLowerCase()
         );
-        if (matched && matched.id) {
-          resolvedSiteUuid = matched.id;
-          console.log(`[UniFi Client Sync] Resolved site '${site}' to UUID: ${resolvedSiteUuid}`);
-        } else if (sitesData.data.length > 0) {
-          resolvedSiteUuid = sitesData.data[0].id;
-          console.log(`[UniFi Client Sync] No direct site match, using first available site UUID: ${resolvedSiteUuid}`);
+        if (matched) {
+          resolvedSiteUuid = matched.id || matched.name || site;
+          console.log(`[UniFi Client Sync] Resolved site '${site}' to: ${resolvedSiteUuid}`);
+        } else {
+          resolvedSiteUuid = rawSites[0].id || rawSites[0].name || site;
+          console.log(`[UniFi Client Sync] No direct site match, using first available site: ${resolvedSiteUuid}`);
         }
       }
     }
@@ -927,7 +953,7 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
         timeout: 5000
       } as any);
 
-      if (res.status !== 404) {
+      if (res.ok) {
         const contentType = res.headers.get('content-type') || '';
         if (contentType.toLowerCase().includes('text/html')) {
           console.log(`[UniFi Client Sync] Path returned HTML instead of JSON: ${path}`);
@@ -944,6 +970,8 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
           console.log(`[UniFi Client Sync] Path returned non-JSON body: ${path} (${jsonErr.message})`);
           continue;
         }
+      } else {
+        console.log(`[UniFi Client Sync] Path returned error status ${res.status}: ${path}`);
       }
     } catch (err: any) {
       console.log(`[UniFi Client Sync] Error trying path ${path}: ${err.message}`);
