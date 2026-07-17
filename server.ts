@@ -1879,8 +1879,7 @@ app.get('/api/clients', async (req, res) => {
   const uispEnabled = state.apiConfig?.uisp?.enabled;
   
   if (!unifiEnabled && !uispEnabled) {
-    const defaultClients = generateFallbackClientsForDevices(state.devices);
-    return res.json(defaultClients);
+    return res.json([]);
   }
 
   try {
@@ -1899,23 +1898,7 @@ app.get('/api/clients', async (req, res) => {
       : Promise.resolve([]);
 
     const [unifiClients, uispClients] = await Promise.all([unifiPromise, uispPromise]);
-    let combined = [...unifiClients, ...uispClients];
-
-    // Fallback: if live list is empty but integrations are enabled, fetch the live devices list and generate clients aligned with them!
-    if (combined.length === 0) {
-      console.log("[Client Sync] Live clients list was empty. Fetching live devices to align fallback clients...");
-      let liveDevices: NetworkDevice[] = [];
-      try {
-        const devPromises = [];
-        if (unifiEnabled) devPromises.push(fetchRealUniFiDevices(state.apiConfig.unifi).catch(() => []));
-        if (uispEnabled) devPromises.push(fetchRealUISPDevices(state.apiConfig.uisp).catch(() => []));
-        const resolvedDevs = await Promise.all(devPromises);
-        liveDevices = resolvedDevs.flat();
-      } catch (err) {
-        console.error("Failed to fetch live devices for client alignment, using default devices list", err);
-      }
-      combined = generateFallbackClientsForDevices(liveDevices.length > 0 ? liveDevices : state.devices);
-    }
+    const combined = [...unifiClients, ...uispClients];
 
     // Sync combined live list to state.clients so that they exist in state for blocking/configuring actions
     combined.forEach(liveClient => {
@@ -1940,8 +1923,7 @@ app.get('/api/clients', async (req, res) => {
     return res.json(combined);
   } catch (err: any) {
     console.error("Combined Live Clients Fetch Error:", err);
-    const defaultClients = generateFallbackClientsForDevices(state.devices);
-    return res.json(defaultClients);
+    return res.json([]);
   }
 });
 
