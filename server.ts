@@ -271,154 +271,7 @@ const state = {
   
   alerts: [] as Alert[],
 
-  clients: [
-    {
-      id: 'client-1',
-      name: 'Executive MacBook Pro',
-      ipAddress: '192.168.1.50',
-      macAddress: 'BC:A9:20:4F:11:22',
-      deviceType: 'laptop',
-      apIdOrSwitchId: 'unifi-ap-u6-ent',
-      apOrSwitchName: 'Office AP Enterprise',
-      connectionType: 'wifi',
-      wifiBand: '5GHz',
-      signalStrengthDbm: -58,
-      vlanId: 10,
-      activityInMbps: 45.2,
-      activityOutMbps: 8.4,
-      totalDataDownloadedGb: 142.5,
-      totalDataUploadedGb: 28.4,
-      uptimeSeconds: 86400,
-      isBlocked: false
-    },
-    {
-      id: 'client-2',
-      name: 'Johns iPhone 15 Pro',
-      ipAddress: '192.168.1.51',
-      macAddress: 'AA:BB:CC:DD:EE:01',
-      deviceType: 'phone',
-      apIdOrSwitchId: 'unifi-ap-u6-ent',
-      apOrSwitchName: 'Office AP Enterprise',
-      connectionType: 'wifi',
-      wifiBand: '5GHz',
-      signalStrengthDbm: -64,
-      vlanId: 20,
-      activityInMbps: 2.1,
-      activityOutMbps: 0.8,
-      totalDataDownloadedGb: 12.4,
-      totalDataUploadedGb: 4.5,
-      uptimeSeconds: 14400,
-      isBlocked: false
-    },
-    {
-      id: 'client-3',
-      name: 'Warehouse Scanner 1',
-      ipAddress: '192.168.1.120',
-      macAddress: '11:22:33:44:55:66',
-      deviceType: 'iot',
-      apIdOrSwitchId: 'unifi-ap-u6-mesh',
-      apOrSwitchName: 'Warehouse Outdoor AP',
-      connectionType: 'wifi',
-      wifiBand: '2.4GHz',
-      signalStrengthDbm: -72,
-      vlanId: 30,
-      activityInMbps: 0.1,
-      activityOutMbps: 0.05,
-      totalDataDownloadedGb: 1.2,
-      totalDataUploadedGb: 0.9,
-      uptimeSeconds: 172800,
-      isBlocked: false
-    },
-    {
-      id: 'client-4',
-      name: 'Reception iPad',
-      ipAddress: '192.168.1.80',
-      macAddress: '88:77:66:55:44:33',
-      deviceType: 'tablet',
-      apIdOrSwitchId: 'unifi-ap-u6-mesh',
-      apOrSwitchName: 'Warehouse Outdoor AP',
-      connectionType: 'wifi',
-      wifiBand: '5GHz',
-      signalStrengthDbm: -61,
-      vlanId: 20,
-      activityInMbps: 12.4,
-      activityOutMbps: 1.5,
-      totalDataDownloadedGb: 24.8,
-      totalDataUploadedGb: 3.2,
-      uptimeSeconds: 43200,
-      isBlocked: false
-    },
-    {
-      id: 'client-5',
-      name: 'Main Synology NAS',
-      ipAddress: '192.168.1.10',
-      macAddress: '00:11:32:A1:B2:C3',
-      deviceType: 'server',
-      apIdOrSwitchId: 'unifi-sw-ent-24',
-      apOrSwitchName: 'Main Distribution Switch',
-      connectionType: 'wired',
-      vlanId: 10,
-      activityInMbps: 110.5,
-      activityOutMbps: 85.1,
-      totalDataDownloadedGb: 1240.5,
-      totalDataUploadedGb: 980.2,
-      uptimeSeconds: 1209600,
-      isBlocked: false
-    },
-    {
-      id: 'client-6',
-      name: 'Conference Room Apple TV',
-      ipAddress: '192.168.1.95',
-      macAddress: 'D0:03:4B:99:88:77',
-      deviceType: 'tv',
-      apIdOrSwitchId: 'unifi-sw-ent-24',
-      apOrSwitchName: 'Main Distribution Switch',
-      connectionType: 'wired',
-      vlanId: 20,
-      activityInMbps: 15.0,
-      activityOutMbps: 0.5,
-      totalDataDownloadedGb: 450.2,
-      totalDataUploadedGb: 15.1,
-      uptimeSeconds: 604800,
-      isBlocked: false
-    },
-    {
-      id: 'client-7',
-      name: 'Smart Thermostat IoT',
-      ipAddress: '192.168.1.150',
-      macAddress: '24:FD:52:11:22:33',
-      deviceType: 'iot',
-      apIdOrSwitchId: 'unifi-ap-u6-mesh',
-      apOrSwitchName: 'Warehouse Outdoor AP',
-      connectionType: 'wifi',
-      wifiBand: '2.4GHz',
-      signalStrengthDbm: -78,
-      vlanId: 30,
-      activityInMbps: 0.01,
-      activityOutMbps: 0.01,
-      totalDataDownloadedGb: 0.4,
-      totalDataUploadedGb: 0.2,
-      uptimeSeconds: 2419200,
-      isBlocked: false
-    },
-    {
-      id: 'client-8',
-      name: 'Security Camera South',
-      ipAddress: '192.168.1.200',
-      macAddress: 'FC:EC:DA:22:33:44',
-      deviceType: 'iot',
-      apIdOrSwitchId: 'unifi-sw-ent-24',
-      apOrSwitchName: 'Main Distribution Switch',
-      connectionType: 'wired',
-      vlanId: 30,
-      activityInMbps: 4.5,
-      activityOutMbps: 4.5,
-      totalDataDownloadedGb: 8.5,
-      totalDataUploadedGb: 450.0,
-      uptimeSeconds: 5184000,
-      isBlocked: false
-    }
-  ] as ClientDevice[]
+  clients: [] as ClientDevice[]
 };
 
 const CONFIG_PATH = path.join(process.cwd(), 'api_config.json');
@@ -762,13 +615,16 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
         const category = detectDeviceCategory('unifi', dev.features?.accessPoint ? 'ap' : '', dev.model, dev.name || dev.model);
 
         const portsList = dev.interfaces?.ports || [];
-        let ports = Array.isArray(portsList) ? portsList.map((p: any) => ({
-          portNumber: p.idx || 1,
-          speedMbps: p.speedMbps || p.maxSpeedMbps || 1000,
-          poeActive: p.poe?.state === 'UP' || p.poe?.enabled || false,
-          poePowerW: p.poe?.power ? parseFloat(p.poe.power) : 0,
-          isConnected: p.state === 'UP' || false
-        })) : [];
+        let ports = Array.isArray(portsList) ? portsList.map((p: any) => {
+          const poePower = p.poe?.power ? parseFloat(p.poe.power) : (p.poePower ? parseFloat(p.poePower) : 0);
+          return {
+            portNumber: p.idx || 1,
+            speedMbps: p.speedMbps || p.maxSpeedMbps || 1000,
+            poeActive: p.poe?.state === 'UP' || p.poe?.enabled || p.poeActive || poePower > 0 || false,
+            poePowerW: poePower,
+            isConnected: p.state === 'UP' || p.up === true || p.isConnected === true || false
+          };
+        }) : [];
 
         const devRealId = `unifi-real-${dev.id || (dev.macAddress ? dev.macAddress.replace(/:/g, '') : Math.random().toString(36).substr(2, 9))}`;
         if (ports.length === 0 && (category === 'switch' || category === 'router')) {
@@ -809,13 +665,16 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
         const txVal = dev['tx_bytes-r'] ? Math.round((dev['tx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : (dev.txBytesRealtime ? Math.round((dev.txBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : getDeterministicValue(devIdSeed, 15, 80, Math.floor(Date.now() / 8000)) / 10);
         const rxVal = dev['rx_bytes-r'] ? Math.round((dev['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : (dev.rxBytesRealtime ? Math.round((dev.rxBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : getDeterministicValue(devIdSeed, 5, 30, Math.floor(Date.now() / 8000)) / 10);
 
-        let portsList = Array.isArray(dev.port_table) ? dev.port_table.map((p: any) => ({
-          portNumber: p.port_idx,
-          speedMbps: p.speed || 1000,
-          poeActive: (p.poe_power && parseFloat(p.poe_power) > 0) || p.enable_poe || false,
-          poePowerW: p.poe_power ? parseFloat(p.poe_power) : 0,
-          isConnected: p.up || false
-        })) : [];
+        let portsList = Array.isArray(dev.port_table) ? dev.port_table.map((p: any) => {
+          const poePower = p.poe_power ? parseFloat(p.poe_power) : (p.poe_power_w ? parseFloat(p.poe_power_w) : 0);
+          return {
+            portNumber: p.port_idx || p.idx || 1,
+            speedMbps: p.speed || p.speedMbps || 1000,
+            poeActive: poePower > 0 || p.poe_active === true || p.enable_poe === true || p.poe_power_w > 0 || false,
+            poePowerW: poePower,
+            isConnected: p.up === true || p.isConnected === true || false
+          };
+        }) : [];
 
         const devRealId = `unifi-real-${dev.mac ? dev.mac.replace(/:/g, '') : Math.random().toString(36).substr(2, 9)}`;
         if (portsList.length === 0 && (category === 'switch' || category === 'router')) {
@@ -925,6 +784,8 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
   const pathsToTry = [
     `/api/v1/sites/${resolvedSiteUuid}/clients`,
     `/v1/sites/${resolvedSiteUuid}/clients`,
+    `/proxy/network/v1/sites/${resolvedSiteUuid}/clients`,
+    `/proxy/network/api/v1/sites/${resolvedSiteUuid}/clients`,
     `/api/v1/clients`,
     `/v1/clients`,
     `/proxy/network/api/s/${site}/stat/sta`,
@@ -1116,29 +977,95 @@ async function fetchRealUISPClients(config: any): Promise<any[]> {
     }
   }
 
-  if (!sitesRes || !parsedData) return [];
+  // Fetch CRM clients or stations from devices list as additional sources
+  let uispClientDevices: any[] = [];
+  try {
+    console.log(`[UISP Clients Sync] Attempting to fetch subscriber devices from: ${baseUrl}/api/v1/devices`);
+    const devRes = await fetch(`${baseUrl}/api/v1/devices`, {
+      headers: {
+        'X-Auth-Token': config.token,
+        'Content-Type': 'application/json'
+      },
+      timeout: 5000
+    } as any).catch(() => null);
 
-  let rawSites: any[] = [];
-  if (Array.isArray(parsedData)) {
-    rawSites = parsedData;
-  } else if (parsedData && Array.isArray(parsedData.data)) {
-    rawSites = parsedData.data;
-  } else if (parsedData && typeof parsedData === 'object') {
-    const arrayVal = Object.values(parsedData).find(v => Array.isArray(v));
-    if (arrayVal) {
-      rawSites = arrayVal as any[];
+    if (devRes && devRes.ok) {
+      const devParsed = await devRes.json().catch(() => null);
+      let rawDevices: any[] = [];
+      if (Array.isArray(devParsed)) rawDevices = devParsed;
+      else if (devParsed && Array.isArray(devParsed.devices)) rawDevices = devParsed.devices;
+      else if (devParsed && Array.isArray(devParsed.data)) rawDevices = devParsed.data;
+
+      const cpeDevices = rawDevices.filter((dev: any) => {
+        const category = String(dev.identification?.category || dev.category || '').toLowerCase();
+        const role = String(dev.identification?.role || dev.role || '').toLowerCase();
+        const model = String(dev.identification?.model || dev.model || '').toLowerCase();
+        const type = String(dev.identification?.type || dev.type || '').toLowerCase();
+        
+        return category === 'station' || category === 'cpe' || category === 'onu' ||
+               role === 'station' || role === 'cpe' || role === 'onu' ||
+               model.includes('loco') || model.includes('nanostation') || model.includes('litebeam') || model.includes('powerbeam') || model.includes('uf-') ||
+               type === 'station' || type === 'cpe' || type === 'onu';
+      });
+
+      console.log(`[UISP Clients Sync] Found ${cpeDevices.length} CPE/ONU/Station subscriber devices in UISP`);
+
+      cpeDevices.forEach((dev: any) => {
+        const id = dev.id || dev.identification?.id || dev.mac || dev.identification?.mac || Math.random().toString(36).substr(2, 9);
+        const mac = dev.identification?.mac || dev.mac || '00:00:00:00:00:00';
+        const ip = dev.ipAddress || dev.ip || dev.identification?.ip || '0.0.0.0';
+        const name = dev.identification?.name || dev.name || dev.identification?.model || 'UISP Station';
+        const status = String(dev.overview?.status || dev.status || '').toLowerCase();
+        const isBlocked = status === 'suspended' || status === 'blocked' || status === 'inactive';
+        const apMac = dev.overview?.apMac || dev.apMac || 'uisp-console';
+        const apName = dev.overview?.apName || dev.apName || 'UISP Sector AP';
+
+        uispClientDevices.push({
+          id: `client-real-uisp-device-${id.replace(/:/g, '')}`,
+          name,
+          ipAddress: ip,
+          macAddress: mac,
+          deviceType: 'laptop',
+          apIdOrSwitchId: `uisp-real-${apMac.replace(/:/g, '')}`,
+          apOrSwitchName: apName,
+          connectionType: 'wifi',
+          vlanId: dev.vlan !== undefined ? dev.vlan : 1,
+          activityInMbps: isBlocked ? 0 : Math.round((dev.overview?.downloadSpeed || 0) * 8 / (1024 * 1024) * 10) / 10 || Math.round(getDeterministicValue(id, 10, 150) / 10),
+          activityOutMbps: isBlocked ? 0 : Math.round((dev.overview?.uploadSpeed || 0) * 8 / (1024 * 1024) * 10) / 10 || Math.round(getDeterministicValue(id, 5, 50) / 10),
+          totalDataDownloadedGb: Math.round(getDeterministicValue(id, 100, 1000) / 10),
+          totalDataUploadedGb: Math.round(getDeterministicValue(id, 10, 200) / 10),
+          uptimeSeconds: dev.overview?.uptime || 86400,
+          isBlocked
+        });
+      });
     }
+  } catch (e: any) {
+    console.log("[UISP Clients Sync] Error fetching subscriber devices:", e.message);
   }
 
-  // Filter for sites that act as clients/subscribers
-  const clientSites = rawSites.filter((site: any) => {
-    const typeStr = String(site.type || '').toLowerCase();
-    return typeStr === 'client' || typeStr === 'subscriber' || site.parent === null || site.parentId !== undefined;
-  });
+  let clientSites: any[] = [];
+  if (sitesRes && parsedData) {
+    let rawSites: any[] = [];
+    if (Array.isArray(parsedData)) {
+      rawSites = parsedData;
+    } else if (parsedData && Array.isArray(parsedData.data)) {
+      rawSites = parsedData.data;
+    } else if (parsedData && typeof parsedData === 'object') {
+      const arrayVal = Object.values(parsedData).find(v => Array.isArray(v));
+      if (arrayVal) {
+        rawSites = arrayVal as any[];
+      }
+    }
 
-  console.log(`[UISP Clients Sync] Found ${clientSites.length} client sites out of ${rawSites.length} total sites`);
+    clientSites = rawSites.filter((site: any) => {
+      const typeStr = String(site.type || '').toLowerCase();
+      return typeStr === 'client' || typeStr === 'subscriber' || site.parent === null || site.parentId !== undefined;
+    });
+  }
 
-  return clientSites.map((site: any) => {
+  console.log(`[UISP Clients Sync] Found ${clientSites.length} client sites out of total sites`);
+
+  const mappedSites = clientSites.map((site: any) => {
     const id = site.id || Math.random().toString(36).substr(2, 9);
     const name = site.name || site.contactName || `UISP Client-${id.substring(0, 4).toUpperCase()}`;
     const mac = site.mac || `fc:ec:da:${getDeterministicValue(id, 10, 99, 1)}:${getDeterministicValue(id, 10, 99, 2)}:${getDeterministicValue(id, 10, 99, 3)}`;
@@ -1166,6 +1093,8 @@ async function fetchRealUISPClients(config: any): Promise<any[]> {
       isBlocked
     };
   });
+
+  return [...mappedSites, ...uispClientDevices];
 }
 
 async function fetchRealUISPDevices(config: any): Promise<NetworkDevice[]> {
@@ -1874,77 +1803,7 @@ app.get('/api/clients', async (req, res) => {
     const [unifiClients, uispClients] = await Promise.all([unifiPromise, uispPromise]);
     let combined = [...unifiClients, ...uispClients];
 
-    // Fallback: if live list is empty but integrations are enabled, generate matching stations for the live devices
-    if (combined.length === 0) {
-      console.log("[Client Sync] Live clients list was empty. Generating deterministic fallback clients aligned with active integrated devices...");
-      const fallbackClients: any[] = [];
 
-      state.devices.forEach((dev) => {
-        const subnet = dev.ipAddress.split('.').slice(0, 3).join('.');
-        if (subnet === '0.0.0' || !dev.ipAddress || dev.ipAddress === '0.0.0.0') return;
-
-        if (dev.category === 'ap') {
-          const names = [
-            { name: 'Staff-MacBook-Pro', type: 'laptop' },
-            { name: 'Guest-iPhone-15', type: 'phone' },
-            { name: 'Operations-iPad', type: 'tablet' }
-          ];
-          names.forEach((c, idx) => {
-            const seed = `${dev.id}-client-${idx}`;
-            const clientIp = `${subnet}.${getDeterministicValue(seed, 50, 150)}`;
-            const clientMac = `fc:ec:da:${getDeterministicValue(seed, 10, 99, 1).toString(16)}:${getDeterministicValue(seed, 10, 99, 2).toString(16)}:${getDeterministicValue(seed, 10, 99, 3).toString(16)}`.toLowerCase();
-            fallbackClients.push({
-              id: `client-real-fallback-${dev.id}-${idx}`,
-              name: c.name,
-              ipAddress: clientIp,
-              macAddress: clientMac,
-              deviceType: c.type,
-              apIdOrSwitchId: dev.id,
-              apOrSwitchName: dev.name,
-              connectionType: 'wifi',
-              wifiBand: getDeterministicValue(seed, 1, 2) === 1 ? '5GHz' : '2.4GHz',
-              signalStrengthDbm: -getDeterministicValue(seed, 45, 75),
-              vlanId: getDeterministicValue(seed, 10, 30),
-              activityInMbps: parseFloat((getDeterministicValue(seed, 5, 85) / 10).toFixed(1)),
-              activityOutMbps: parseFloat((getDeterministicValue(seed, 1, 25) / 10).toFixed(1)),
-              totalDataDownloadedGb: parseFloat((getDeterministicValue(seed, 100, 1500) / 10).toFixed(1)),
-              totalDataUploadedGb: parseFloat((getDeterministicValue(seed, 10, 200) / 10).toFixed(1)),
-              uptimeSeconds: getDeterministicValue(seed, 3600, 172800),
-              isBlocked: false
-            });
-          });
-        } else if (dev.category === 'switch') {
-          const names = [
-            { name: 'Synology-Storage-NAS', type: 'server' },
-            { name: 'Conf-Room-AppleTV', type: 'tv' },
-            { name: 'Office-Printers-Multi', type: 'iot' }
-          ];
-          names.forEach((c, idx) => {
-            const seed = `${dev.id}-client-${idx}`;
-            const clientIp = `${subnet}.${getDeterministicValue(seed, 10, 45)}`;
-            const clientMac = `fc:ec:da:${getDeterministicValue(seed, 10, 99, 1).toString(16)}:${getDeterministicValue(seed, 10, 99, 2).toString(16)}:${getDeterministicValue(seed, 10, 99, 3).toString(16)}`.toLowerCase();
-            fallbackClients.push({
-              id: `client-real-fallback-${dev.id}-${idx}`,
-              name: c.name,
-              ipAddress: clientIp,
-              macAddress: clientMac,
-              deviceType: c.type,
-              apIdOrSwitchId: dev.id,
-              apOrSwitchName: dev.name,
-              connectionType: 'wired',
-              vlanId: 1,
-              activityInMbps: parseFloat((getDeterministicValue(seed, 15, 120) / 10).toFixed(1)),
-              activityOutMbps: parseFloat((getDeterministicValue(seed, 10, 85) / 10).toFixed(1)),
-              totalDataDownloadedGb: parseFloat((getDeterministicValue(seed, 400, 4500) / 10).toFixed(1)),
-              totalDataUploadedGb: parseFloat((getDeterministicValue(seed, 200, 3200) / 10).toFixed(1)),
-              uptimeSeconds: getDeterministicValue(seed, 86400, 1209600),
-              isBlocked: false
-            });
-          });
-        }
-      });
-      combined = fallbackClients;
-    }
 
     // Sync combined live list to state.clients so that they exist in state for blocking/configuring actions
     combined.forEach(liveClient => {
