@@ -20,6 +20,122 @@ import {
 
 dotenv.config();
 
+// Global Request/Response Logger for Ubiquiti controllers live API tracing
+interface ApiLogEntry {
+  id: string;
+  timestamp: string;
+  integration: 'unifi' | 'uisp';
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  status: number;
+  statusText: string;
+  responsePreview: string;
+  timeTakenMs: number;
+  isCached: boolean;
+}
+
+const apiRequestHistory: ApiLogEntry[] = [];
+
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async function(input: RequestInfo | URL, init?: RequestInit) {
+  const startTime = Date.now();
+  const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : (input as any).url);
+  const method = init?.method || 'GET';
+  const headers = init?.headers || {};
+
+  // Check if it's an external controller request
+  const isExternal = url.startsWith('http') && !url.includes('localhost:3000') && !url.includes('127.0.0.1:3000');
+
+  if (!isExternal) {
+    return originalFetch(input, init);
+  }
+
+  let response: Response;
+  let errorMsg = '';
+  let status = 0;
+  let statusText = 'Network Error';
+  let responseText = '';
+
+  try {
+    response = await originalFetch(input, init);
+    status = response.status;
+    statusText = response.statusText;
+    
+    try {
+      const clonedRes = response.clone();
+      responseText = await clonedRes.text();
+    } catch (readErr: any) {
+      responseText = `[Error reading response text: ${readErr.message}]`;
+    }
+    return response;
+  } catch (err: any) {
+    errorMsg = err.message;
+    responseText = `[Fetch Exception: ${errorMsg}]`;
+    throw err;
+  } finally {
+    const timeTakenMs = Date.now() - startTime;
+    
+    let integration: 'unifi' | 'uisp' = 'unifi';
+    const hasUispToken = headers && (
+      (headers as any)['X-Auth-Token'] !== undefined || 
+      Object.keys(headers).some(k => k.toLowerCase() === 'x-auth-token')
+    );
+    if (hasUispToken || url.toLowerCase().includes('uisp') || url.toLowerCase().includes('nms')) {
+      integration = 'uisp';
+    }
+
+    // Mask sensitive keys (like API Key, Token, passwords) in headers
+    const safeHeaders: Record<string, string> = {};
+    if (headers) {
+      if (typeof (headers as any).forEach === 'function') {
+        (headers as any).forEach((val: string, key: string) => {
+          const lowerK = key.toLowerCase();
+          if (lowerK.includes('key') || lowerK.includes('token') || lowerK.includes('auth')) {
+            safeHeaders[key] = '••••••••••••••••';
+          } else {
+            safeHeaders[key] = val;
+          }
+        });
+      } else if (typeof headers === 'object') {
+        Object.keys(headers).forEach(k => {
+          const lowerK = k.toLowerCase();
+          const val = (headers as any)[k];
+          if (lowerK.includes('key') || lowerK.includes('token') || lowerK.includes('auth')) {
+            safeHeaders[k] = '••••••••••••••••';
+          } else {
+            safeHeaders[k] = String(val);
+          }
+        });
+      }
+    }
+
+    let responsePreview = responseText;
+    try {
+      const parsed = JSON.parse(responseText);
+      responsePreview = JSON.stringify(parsed, null, 2);
+    } catch {}
+
+    apiRequestHistory.unshift({
+      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      timestamp: new Date().toISOString(),
+      integration,
+      url,
+      method,
+      headers: safeHeaders,
+      status: status || 0,
+      statusText: errorMsg ? `Error: ${errorMsg}` : statusText,
+      responsePreview,
+      timeTakenMs,
+      isCached: false
+    });
+
+    if (apiRequestHistory.length > 100) {
+      apiRequestHistory.pop();
+    }
+  }
+};
+
 function getDeterministicValue(seedStr: string, min: number, max: number, offset = 0): number {
   let hash = 0;
   for (let i = 0; i < seedStr.length; i++) {
@@ -1629,6 +1745,17 @@ app.post('/api/config/test', async (req, res) => {
   } else {
     res.status(400).json({ success: false, error: 'Invalid config type' });
   }
+});
+
+// Get Live API tracing history
+app.get('/api/request-history', (req, res) => {
+  res.json(apiRequestHistory);
+});
+
+// Clear Live API tracing history
+app.post('/api/request-history/clear', (req, res) => {
+  apiRequestHistory.length = 0;
+  res.json({ success: true });
 });
 
 // Configure Device

@@ -7,6 +7,7 @@ import React from 'react';
 import Header from './components/Header.jsx';
 import DeviceGrid from './components/DeviceGrid.jsx';
 import ApiSettingsModal from './components/ApiSettingsModal.jsx';
+import ApiHistoryModal from './components/ApiHistoryModal.jsx';
 import NetworkOverview from './components/NetworkOverview.jsx';
 import ClientExplorer from './components/ClientExplorer.jsx';
 import { NetworkDevice, TrafficSnapshot, Alert, AlertThresholds, ClientDevice } from './types.js';
@@ -37,6 +38,7 @@ export default function App() {
   const [selectedDevice, setSelectedDevice] = React.useState<NetworkDevice | null>(null);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const [isApiHistoryOpen, setIsApiHistoryOpen] = React.useState(false);
 
   // Save dark mode state
   React.useEffect(() => {
@@ -244,6 +246,7 @@ export default function App() {
         totalDownloadMbps={totalDownloadMbps}
         totalUploadMbps={totalUploadMbps}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenApiHistory={() => setIsApiHistoryOpen(true)}
       />
 
       {/* Sticky Tab Navigation Header */}
@@ -382,6 +385,11 @@ export default function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onSaved={() => fetchTelemetry(false)}
+      />
+
+      <ApiHistoryModal
+        isOpen={isApiHistoryOpen}
+        onClose={() => setIsApiHistoryOpen(false)}
       />
 
     </div>

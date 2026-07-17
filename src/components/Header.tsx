@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Sun, Moon, Cpu, Shield, Activity, Wifi, Settings } from 'lucide-react';
+import { Sun, Moon, Cpu, Shield, Activity, Wifi, Settings, Terminal } from 'lucide-react';
 
 interface HeaderProps {
   darkMode: boolean;
@@ -15,6 +15,7 @@ interface HeaderProps {
   totalDownloadMbps: number;
   totalUploadMbps: number;
   onOpenSettings: () => void;
+  onOpenApiHistory: () => void;
 }
 
 export default function Header({
@@ -25,7 +26,8 @@ export default function Header({
   alertCount,
   totalDownloadMbps,
   totalUploadMbps,
-  onOpenSettings
+  onOpenSettings,
+  onOpenApiHistory
 }: HeaderProps) {
   
   React.useEffect(() => {
@@ -91,8 +93,18 @@ export default function Header({
             )}
           </div>
 
-          {/* Actions: API Settings & Dark Mode Toggle */}
+          {/* Actions: API Settings, API Live Tracer & Dark Mode Toggle */}
           <div className="flex items-center space-x-2">
+            <button
+              onClick={onOpenApiHistory}
+              id="api-history-toggle"
+              className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded transition-colors border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer flex items-center gap-1.5 px-2.5 text-xs font-mono font-medium"
+              title="View Raw Live Controller API request & response history"
+            >
+              <Terminal className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 animate-pulse" />
+              <span className="hidden sm:inline text-slate-600 dark:text-slate-300">API Live Tracer</span>
+            </button>
+
             <button
               onClick={onOpenSettings}
               id="api-settings-toggle"
