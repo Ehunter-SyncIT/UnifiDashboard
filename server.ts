@@ -691,13 +691,9 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   ];
 
   let devicesRes: any = null;
-  let parsedData: any = null;
+  let allRawDevices: any[] = [];
+  let successfulPaths: string[] = [];
   let lastErrorMsg = '';
-  let finalPathUsed = '';
-
-  let backupDevicesRes: any = null;
-  let backupDevicesParsedData: any = null;
-  let backupDevicesPathUsed = '';
 
   for (const path of pathsToTry) {
     try {
@@ -778,16 +774,13 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
 
           if (testDevices.length > 0) {
             devicesRes = res;
-            parsedData = testDevices;
-            finalPathUsed = path;
-            console.log(`[UniFi Sync] Found ${testDevices.length} active devices at path: ${path} across ${pageCount} pages. Breaking search.`);
-            break;
+            allRawDevices.push(...testDevices);
+            successfulPaths.push(path);
+            console.log(`[UniFi Sync] Found ${testDevices.length} active devices at path: ${path} across ${pageCount} pages. Accumulating.`);
           } else {
-            console.log(`[UniFi Sync] Path ${path} succeeded but returned 0 devices. Continuing search...`);
-            if (!backupDevicesRes) {
-              backupDevicesRes = res;
-              backupDevicesParsedData = testDevices;
-              backupDevicesPathUsed = path;
+            console.log(`[UniFi Sync] Path ${path} succeeded but returned 0 devices.`);
+            if (!devicesRes) {
+              devicesRes = res;
             }
           }
         } catch (jsonErr: any) {
@@ -803,43 +796,21 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
     }
   }
 
-  if (!devicesRes && backupDevicesRes) {
-    devicesRes = backupDevicesRes;
-    parsedData = backupDevicesParsedData;
-    finalPathUsed = backupDevicesPathUsed;
-    console.log(`[UniFi Sync] No non-empty devices response found, falling back to successful empty response at: ${finalPathUsed}`);
-  }
-
   try {
-    if (!devicesRes) {
-      if (lastErrorMsg) {
-        throw new Error(`Connection timed out or host unreachable: ${lastErrorMsg}`);
-      } else {
-        throw new Error(`Tested endpoints returned 404/invalid content. Check if UniFi Network application is running or if Site ID '${site}' is correct.`);
+    if (allRawDevices.length === 0) {
+      if (!devicesRes) {
+        if (lastErrorMsg) {
+          throw new Error(`Connection timed out or host unreachable: ${lastErrorMsg}`);
+        } else {
+          throw new Error(`Tested endpoints returned 404/invalid content. Check if UniFi Network application is running or if Site ID '${site}' is correct.`);
+        }
       }
+      return [];
     }
 
-    if (!devicesRes.ok) {
-      throw new Error(`status ${devicesRes.status} ${devicesRes.statusText} at ${finalPathUsed}`);
-    }
+    console.log(`[UniFi Sync] Successfully fetched total of ${allRawDevices.length} raw devices from paths: ${successfulPaths.join(', ')}`);
 
-    const data: any = parsedData;
-    let rawDevices: any[] = [];
-    
-    if (Array.isArray(data)) {
-      rawDevices = data;
-    } else if (data && Array.isArray(data.data)) {
-      rawDevices = data.data;
-    } else if (data && typeof data === 'object') {
-      const arrayVal = Object.values(data).find(v => Array.isArray(v));
-      if (arrayVal) {
-        rawDevices = arrayVal as any[];
-      }
-    }
-
-    console.log(`[UniFi Sync] Successfully fetched ${rawDevices.length} devices from path ${finalPathUsed}`);
-
-    return rawDevices.map((dev: any) => {
+    const mappedDevices = allRawDevices.map((dev: any) => {
       // Detect if this device uses the new official UniFi Local API Key structure
       const isOfficial = (dev.macAddress !== undefined || dev.ipAddress !== undefined || dev.firmwareVersion !== undefined || dev.interfaces !== undefined);
 
@@ -954,6 +925,33 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
         };
       }
     });
+
+    const uniqueDevicesMap = new Map<string, NetworkDevice>();
+    for (const dev of mappedDevices) {
+      const normMac = String(dev.macAddress || '').toLowerCase().replace(/[^a-f0-9]/g, '');
+      if (!normMac) {
+        uniqueDevicesMap.set(dev.id, dev);
+        continue;
+      }
+      const existing = uniqueDevicesMap.get(normMac);
+      if (!existing) {
+        uniqueDevicesMap.set(normMac, dev);
+      } else {
+        if (dev.status === 'online' && existing.status !== 'online') {
+          uniqueDevicesMap.set(normMac, dev);
+        } else if (dev.status === existing.status) {
+          const devPorts = dev.ports?.length || 0;
+          const extPorts = existing.ports?.length || 0;
+          if (devPorts > extPorts) {
+            uniqueDevicesMap.set(normMac, dev);
+          }
+        }
+      }
+    }
+
+    const finalDevices = Array.from(uniqueDevicesMap.values());
+    console.log(`[UniFi Sync] After de-duplication, returned ${finalDevices.length} unique UniFi devices.`);
+    return finalDevices;
   } catch (err: any) {
     throw new Error(`UniFi Device fetch failed: ${err.message}`);
   }
@@ -1132,13 +1130,9 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
   ];
 
   let clientsRes: any = null;
-  let parsedData: any = null;
+  let allRawClients: any[] = [];
+  let successfulPaths: string[] = [];
   let lastErrorMsg = '';
-  let finalPathUsed = '';
-
-  let backupClientsRes: any = null;
-  let backupClientsParsedData: any = null;
-  let backupClientsPathUsed = '';
 
   for (const path of pathsToTry) {
     try {
@@ -1219,16 +1213,13 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
 
           if (testClients.length > 0) {
             clientsRes = res;
-            parsedData = testClients;
-            finalPathUsed = path;
-            console.log(`[UniFi Client Sync] Found ${testClients.length} active clients at path: ${path} across ${pageCount} pages. Breaking search.`);
-            break;
+            allRawClients.push(...testClients);
+            successfulPaths.push(path);
+            console.log(`[UniFi Client Sync] Found ${testClients.length} active clients at path: ${path} across ${pageCount} pages. Accumulating.`);
           } else {
-            console.log(`[UniFi Client Sync] Path ${path} succeeded but returned 0 clients. Continuing search...`);
-            if (!backupClientsRes) {
-              backupClientsRes = res;
-              backupClientsParsedData = testClients;
-              backupClientsPathUsed = path;
+            console.log(`[UniFi Client Sync] Path ${path} succeeded but returned 0 clients.`);
+            if (!clientsRes) {
+              clientsRes = res;
             }
           }
         } catch (jsonErr: any) {
@@ -1244,92 +1235,100 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
     }
   }
 
-  if (!clientsRes && backupClientsRes) {
-    clientsRes = backupClientsRes;
-    parsedData = backupClientsParsedData;
-    finalPathUsed = backupClientsPathUsed;
-    console.log(`[UniFi Client Sync] No non-empty clients response found, falling back to successful empty response at: ${finalPathUsed}`);
-  }
-
-  if (!clientsRes) {
-    throw new Error(`Tested endpoints returned 404/invalid content for clients.`);
-  }
-
-  if (!clientsRes.ok) {
-    throw new Error(`status ${clientsRes.status} ${clientsRes.statusText} at ${finalPathUsed}`);
-  }
-
-  const data = parsedData;
-  let rawClients: any[] = [];
-  if (Array.isArray(data)) {
-    rawClients = data;
-  } else if (data && Array.isArray(data.data)) {
-    rawClients = data.data;
-  } else if (data && typeof data === 'object') {
-    const arrayVal = Object.values(data).find(v => Array.isArray(v));
-    if (arrayVal) {
-      rawClients = arrayVal as any[];
-    }
-  }
-
-  console.log(`[UniFi Client Sync] Successfully fetched ${rawClients.length} clients`);
-
-  return rawClients.map((client: any) => {
-    const mac = client.macAddress || client.mac || '00:00:00:00:00:00';
-    const ip = client.ipAddress || client.ip || '0.0.0.0';
-    const name = client.name || client.hostname || client.dhcpname || `Client-${mac.substring(12).replace(/:/g, '').toUpperCase()}`;
-    
-    let deviceType = 'laptop';
-    const lowerName = name.toLowerCase();
-    const os = (client.os_name || client.fingerprint_dev_ids?.os_name || '').toLowerCase();
-    
-    if (lowerName.includes('iphone') || lowerName.includes('phone') || lowerName.includes('android') || os.includes('ios') || os.includes('android')) {
-      deviceType = 'phone';
-    } else if (lowerName.includes('ipad') || lowerName.includes('tablet') || os.includes('ipad')) {
-      deviceType = 'tablet';
-    } else if (lowerName.includes('nas') || lowerName.includes('server') || lowerName.includes('synology') || lowerName.includes('unraid')) {
-      deviceType = 'server';
-    } else if (lowerName.includes('tv') || lowerName.includes('television') || lowerName.includes('apple tv') || lowerName.includes('roku') || lowerName.includes('shield')) {
-      deviceType = 'tv';
-    } else if (lowerName.includes('thermostat') || lowerName.includes('camera') || lowerName.includes('iot') || lowerName.includes('smart') || lowerName.includes('plug')) {
-      deviceType = 'iot';
-    }
-
-    const hasApMac = !!(client.apMac || client.ap_mac || client.essid || client.wifiBand || client.channel);
-    const isWired = client.isWired === true || client.is_wired === true || client.type === 'WIRED' || String(client.connectionType).toLowerCase() === 'wired' || (client.connectionType !== undefined && String(client.connectionType).toLowerCase() !== 'wifi' && !hasApMac);
-    const isWifi = !isWired || hasApMac;
-    const apIdOrSwitchId = client.apMac || client.ap_mac || client.switchMac || client.switch_mac || client.uplinkMac || client.uplinkDeviceMac || 'unifi-sw-ent-24';
-    const apOrSwitchName = client.apName || client.ap_name || client.switchName || client.switch_name || client.uplinkName || client.uplinkDeviceName || (isWifi ? 'Office AP Enterprise' : 'Main Distribution Switch');
-
-    const mappedVlan = (() => {
-      const netId = client.virtualNetworkId || client.networkId || client.virtual_network_id || client.network_id;
-      if (netId && networkMap.has(String(netId))) {
-        return networkMap.get(String(netId))!;
+  try {
+    if (allRawClients.length === 0) {
+      if (!clientsRes) {
+        throw new Error(`Tested endpoints returned 404/invalid content for clients.`);
       }
-      const parsedVlan = parseInt(client.vlanId !== undefined ? client.vlanId : (client.vlan !== undefined ? client.vlan : 1));
-      return isNaN(parsedVlan) ? 1 : parsedVlan;
-    })();
+      return [];
+    }
 
-    return {
-      id: `client-real-${mac.replace(/:/g, '')}`,
-      name,
-      ipAddress: ip,
-      macAddress: mac,
-      deviceType,
-      apIdOrSwitchId,
-      apOrSwitchName,
-      connectionType: isWifi ? 'wifi' : 'wired',
-      wifiBand: isWifi ? (client.channel && client.channel > 14 ? '5GHz' : '2.4GHz') : undefined,
-      signalStrengthDbm: isWifi ? (client.rssi ? -Math.abs(client.rssi) : -62) : undefined,
-      vlanId: mappedVlan,
-      activityInMbps: client.txBytesRealtime !== undefined ? Math.round((client.txBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (client['tx_bytes-r'] ? Math.round((client['tx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 4 * 10) / 10),
-      activityOutMbps: client.rxBytesRealtime !== undefined ? Math.round((client.rxBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (client['rx_bytes-r'] ? Math.round((client['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 1.5 * 10) / 10),
-      totalDataDownloadedGb: client.txBytes !== undefined ? Math.round((client.txBytes / (1024 * 1024 * 1024)) * 100) / 100 : (client.tx_bytes ? Math.round((client.tx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 80 * 100) / 100),
-      totalDataUploadedGb: client.rxBytes !== undefined ? Math.round((client.rxBytes / (1024 * 1024 * 1024)) * 100) / 100 : (client.rx_bytes ? Math.round((client.rx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 15 * 100) / 100),
-      uptimeSeconds: client.uptime || 3600,
-      isBlocked: client.blocked || false
-    };
-  });
+    console.log(`[UniFi Client Sync] Successfully fetched total of ${allRawClients.length} raw clients from paths: ${successfulPaths.join(', ')}`);
+
+    const mappedClients = allRawClients.map((client: any) => {
+      const mac = client.macAddress || client.mac || '00:00:00:00:00:00';
+      const ip = client.ipAddress || client.ip || '0.0.0.0';
+      const name = client.name || client.hostname || client.dhcpname || `Client-${mac.substring(12).replace(/:/g, '').toUpperCase()}`;
+      
+      let deviceType = 'laptop';
+      const lowerName = name.toLowerCase();
+      const os = (client.os_name || client.fingerprint_dev_ids?.os_name || '').toLowerCase();
+      
+      if (lowerName.includes('iphone') || lowerName.includes('phone') || lowerName.includes('android') || os.includes('ios') || os.includes('android')) {
+        deviceType = 'phone';
+      } else if (lowerName.includes('ipad') || lowerName.includes('tablet') || os.includes('ipad')) {
+        deviceType = 'tablet';
+      } else if (lowerName.includes('nas') || lowerName.includes('server') || lowerName.includes('synology') || lowerName.includes('unraid')) {
+        deviceType = 'server';
+      } else if (lowerName.includes('tv') || lowerName.includes('television') || lowerName.includes('apple tv') || lowerName.includes('roku') || lowerName.includes('shield')) {
+        deviceType = 'tv';
+      } else if (lowerName.includes('thermostat') || lowerName.includes('camera') || lowerName.includes('iot') || lowerName.includes('smart') || lowerName.includes('plug')) {
+        deviceType = 'iot';
+      }
+
+      const hasApMac = !!(client.apMac || client.ap_mac || client.essid || client.wifiBand || client.channel);
+      const isWired = client.isWired === true || client.is_wired === true || client.type === 'WIRED' || String(client.connectionType).toLowerCase() === 'wired' || (client.connectionType !== undefined && String(client.connectionType).toLowerCase() !== 'wifi' && !hasApMac);
+      const isWifi = !isWired || hasApMac;
+      const apIdOrSwitchId = client.apMac || client.ap_mac || client.switchMac || client.switch_mac || client.uplinkMac || client.uplinkDeviceMac || 'unifi-sw-ent-24';
+      const apOrSwitchName = client.apName || client.ap_name || client.switchName || client.switch_name || client.uplinkName || client.uplinkDeviceName || (isWifi ? 'Office AP Enterprise' : 'Main Distribution Switch');
+
+      const mappedVlan = (() => {
+        const netId = client.virtualNetworkId || client.networkId || client.virtual_network_id || client.network_id;
+        if (netId && networkMap.has(String(netId))) {
+          return networkMap.get(String(netId))!;
+        }
+        const parsedVlan = parseInt(client.vlanId !== undefined ? client.vlanId : (client.vlan !== undefined ? client.vlan : 1));
+        return isNaN(parsedVlan) ? 1 : parsedVlan;
+      })();
+
+      return {
+        id: `client-real-${mac.replace(/:/g, '')}`,
+        name,
+        ipAddress: ip,
+        macAddress: mac,
+        deviceType,
+        apIdOrSwitchId,
+        apOrSwitchName,
+        connectionType: isWifi ? 'wifi' : 'wired',
+        wifiBand: isWifi ? (client.channel && client.channel > 14 ? '5GHz' : '2.4GHz') : undefined,
+        signalStrengthDbm: isWifi ? (client.rssi ? -Math.abs(client.rssi) : -62) : undefined,
+        vlanId: mappedVlan,
+        activityInMbps: client.txBytesRealtime !== undefined ? Math.round((client.txBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (client['tx_bytes-r'] ? Math.round((client['tx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 4 * 10) / 10),
+        activityOutMbps: client.rxBytesRealtime !== undefined ? Math.round((client.rxBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (client['rx_bytes-r'] ? Math.round((client['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 1.5 * 10) / 10),
+        totalDataDownloadedGb: client.txBytes !== undefined ? Math.round((client.txBytes / (1024 * 1024 * 1024)) * 100) / 100 : (client.tx_bytes ? Math.round((client.tx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 80 * 100) / 100),
+        totalDataUploadedGb: client.rxBytes !== undefined ? Math.round((client.rxBytes / (1024 * 1024 * 1024)) * 100) / 100 : (client.rx_bytes ? Math.round((client.rx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 15 * 100) / 100),
+        uptimeSeconds: client.uptime || 3600,
+        isBlocked: client.blocked || false
+      };
+    });
+
+    const uniqueClientsMap = new Map<string, any>();
+    for (const client of mappedClients) {
+      const normMac = String(client.macAddress || '').toLowerCase().replace(/[^a-f0-9]/g, '');
+      if (!normMac) {
+        uniqueClientsMap.set(client.id, client);
+        continue;
+      }
+      const existing = uniqueClientsMap.get(normMac);
+      if (!existing) {
+        uniqueClientsMap.set(normMac, client);
+      } else {
+        const hasActualName = client.name && !client.name.startsWith('Client-');
+        const extActualName = existing.name && !existing.name.startsWith('Client-');
+        if (hasActualName && !extActualName) {
+          uniqueClientsMap.set(normMac, client);
+        } else if (client.activityInMbps > existing.activityInMbps) {
+          uniqueClientsMap.set(normMac, client);
+        }
+      }
+    }
+
+    const finalClients = Array.from(uniqueClientsMap.values());
+    console.log(`[UniFi Client Sync] After de-duplication, returned ${finalClients.length} unique UniFi clients.`);
+    return finalClients;
+  } catch (err: any) {
+    throw new Error(`UniFi Client Sync failed: ${err.message}`);
+  }
 }
 
 async function fetchRealUISPClients(config: any): Promise<any[]> {
