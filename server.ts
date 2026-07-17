@@ -427,21 +427,35 @@ function detectDeviceCategory(
 
   // Explicit overrides if we have clear controller category
   if (c === 'switch' || c === 'sw' || c === 'usw') return 'switch';
-  if (c === 'ap' || c === 'uap' || c === 'wifi') return 'ap';
-  if (c === 'router' || c === 'gateway' || c === 'security-gateway' || c === 'usg' || c === 'udm' || c === 'uxg') return 'router';
+  if (c === 'ap' || c === 'uap' || c === 'wifi' || c === 'accesspoint' || c.includes('accesspoint')) return 'ap';
+  if (c === 'router' || c === 'gateway' || c === 'security-gateway' || c === 'usg' || c === 'udm' || c === 'uxg' || c === 'dream' || c.includes('dream')) return 'router';
   if (c === 'wireless' || c === 'station' || c === 'cpe' || c === 'backhaul' || c === 'bridge') return 'wireless';
 
   // 1. AP detection
   if (
     m.includes('unifi-ap') ||
     m.includes('uap') ||
-    m.includes('u6-') ||
+    m.startsWith('u6-') ||
+    m.includes('-u6-') ||
+    m.startsWith('u7-') ||
+    m.includes('-u7-') ||
+    m.includes('uap-') ||
     m.includes('-ap') ||
+    m.startsWith('ap-') ||
     m === 'ap' ||
-    n.includes(' ap') ||
-    n.includes('ap ') ||
+    m.includes('mesh') ||
+    m.includes('extender') ||
+    m.includes('beacon') ||
+    m.includes('inwall') ||
+    m.includes('in-wall') ||
+    m.includes('iw-') ||
+    m.includes('swiss-army') ||
+    m.includes('sk-ultra') ||
+    m.includes('uk-ultra') ||
+    n.includes('access point') ||
     n.includes('unifi ap') ||
-    n.includes('access point')
+    n.includes('wifi') ||
+    (n.includes('ap') && !n.includes('switch') && !n.includes('sw'))
   ) {
     return 'ap';
   }
@@ -491,15 +505,20 @@ function detectDeviceCategory(
     m.includes('gateway') ||
     m.includes('udm') ||
     m.includes('uxg') ||
+    m.includes('ucg') ||
     m.includes('ugw') ||
     m.includes('udg') ||
     m.includes('dream') ||
     m.includes('console') ||
+    m.includes('express') ||
+    m.startsWith('ux') ||
     n.includes('router') ||
     n.includes('gateway') ||
     n.includes('udm') ||
+    n.includes('ucg') ||
     n.includes('dream') ||
     n.includes('console') ||
+    n.includes('express') ||
     n.includes('remt') ||
     n.includes('security engine')
   ) {
@@ -660,8 +679,8 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   
   // Try endpoints for both modern UniFi Local API (UUID-based), UniFi OS (site-independent), and self-hosted/legacy controllers
   const pathsToTry = [
-    `/proxy/network/integration/v1/devices`,
     `/proxy/network/integration/v1/sites/${resolvedSiteUuid}/devices`,
+    `/proxy/network/integration/v1/devices`,
     `/api/v1/sites/${resolvedSiteUuid}/devices`,
     `/v1/sites/${resolvedSiteUuid}/devices`,
     `/api/v1/devices`,
@@ -701,30 +720,73 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
 
         try {
           const testData = await res.json();
-          
           let testDevices: any[] = [];
-          if (Array.isArray(testData)) {
-            testDevices = testData;
-          } else if (testData && Array.isArray(testData.data)) {
-            testDevices = testData.data;
-          } else if (testData && typeof testData === 'object') {
-            const arrayVal = Object.values(testData).find(v => Array.isArray(v));
-            if (arrayVal) {
-              testDevices = arrayVal as any[];
+          let currentData = testData;
+          let pageCount = 0;
+
+          while (currentData && pageCount < 20) {
+            pageCount++;
+            let pageDevices: any[] = [];
+            if (Array.isArray(currentData)) {
+              pageDevices = currentData;
+            } else if (currentData && Array.isArray(currentData.data)) {
+              pageDevices = currentData.data;
+            } else if (currentData && typeof currentData === 'object') {
+              const arrayVal = Object.values(currentData).find(v => Array.isArray(v));
+              if (arrayVal) {
+                pageDevices = arrayVal as any[];
+              }
+            }
+
+            testDevices.push(...pageDevices);
+
+            const nextCursor = currentData.meta?.next || currentData.pagination?.next || currentData.next;
+            if (nextCursor && typeof nextCursor === 'string') {
+              let nextUrl = '';
+              if (nextCursor.startsWith('http')) {
+                nextUrl = nextCursor;
+              } else if (nextCursor.startsWith('/')) {
+                nextUrl = `${baseUrl}${nextCursor}`;
+              } else {
+                const separator = path.includes('?') ? '&' : '?';
+                if (nextCursor.match(/^\d+$/)) {
+                  nextUrl = `${baseUrl}${path}${separator}page=${nextCursor}`;
+                } else {
+                  nextUrl = `${baseUrl}${path}${separator}cursor=${nextCursor}`;
+                }
+              }
+
+              console.log(`[UniFi Sync] Fetching next page of devices: ${nextUrl}`);
+              const nextRes = await fetch(nextUrl, {
+                headers: {
+                  'X-API-KEY': config.apiKey || '',
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                }
+              });
+
+              if (nextRes.ok) {
+                currentData = await nextRes.json().catch(() => null);
+              } else {
+                console.log(`[UniFi Sync] Next page of devices fetch failed: ${nextRes.status}`);
+                currentData = null;
+              }
+            } else {
+              currentData = null;
             }
           }
 
           if (testDevices.length > 0) {
             devicesRes = res;
-            parsedData = testData;
+            parsedData = testDevices;
             finalPathUsed = path;
-            console.log(`[UniFi Sync] Found ${testDevices.length} active devices at path: ${path}. Breaking search.`);
+            console.log(`[UniFi Sync] Found ${testDevices.length} active devices at path: ${path} across ${pageCount} pages. Breaking search.`);
             break;
           } else {
             console.log(`[UniFi Sync] Path ${path} succeeded but returned 0 devices. Continuing search...`);
             if (!backupDevicesRes) {
               backupDevicesRes = res;
-              backupDevicesParsedData = testData;
+              backupDevicesParsedData = testDevices;
               backupDevicesPathUsed = path;
             }
           }
@@ -769,7 +831,6 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
     } else if (data && Array.isArray(data.data)) {
       rawDevices = data.data;
     } else if (data && typeof data === 'object') {
-      // Sometimes it might return under another key or as a direct property
       const arrayVal = Object.values(data).find(v => Array.isArray(v));
       if (arrayVal) {
         rawDevices = arrayVal as any[];
@@ -786,7 +847,7 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
         const stateStr = String(dev.state || '').toUpperCase();
         const isOnline = stateStr === 'ONLINE' || stateStr === 'CONNECTED' || (dev.uptime && dev.uptime > 0) || stateStr === 'UP';
         
-        const category = detectDeviceCategory('unifi', dev.features?.accessPoint ? 'ap' : '', dev.model, dev.name || dev.model);
+        const category = detectDeviceCategory('unifi', dev.type || dev.category || (dev.features?.accessPoint ? 'ap' : ''), dev.model, dev.name || dev.model);
 
         const portsList = dev.interfaces?.ports || [];
         let ports = Array.isArray(portsList) ? portsList.map((p: any) => {
@@ -808,6 +869,19 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
         const poeBudgetTotalW = getDeterministicPoeBudget(dev.model);
         const poeBudgetUsedW = ports.reduce((sum: number, p: any) => sum + (p.poePowerW || 0), 0);
 
+        const cpuVal = dev.sys_stats?.cpu !== undefined ? Math.round(parseFloat(dev.sys_stats.cpu)) :
+                       dev.systemStats?.cpu !== undefined ? Math.round(parseFloat(dev.systemStats.cpu)) :
+                       dev.stats?.cpu !== undefined ? Math.round(parseFloat(dev.stats.cpu)) :
+                       dev.cpu !== undefined ? Math.round(parseFloat(dev.cpu)) :
+                       getDeterministicValue(`unifi-${dev.id || dev.macAddress}`, 8, 38, Math.floor(Date.now() / 15000));
+
+        const ramVal = dev.sys_stats?.mem !== undefined ? Math.round(parseFloat(dev.sys_stats.mem)) :
+                       dev.systemStats?.ram !== undefined ? Math.round(parseFloat(dev.systemStats.ram)) :
+                       dev.systemStats?.memory !== undefined ? Math.round(parseFloat(dev.systemStats.memory)) :
+                       dev.stats?.ram !== undefined ? Math.round(parseFloat(dev.stats.ram)) :
+                       dev.ram !== undefined ? Math.round(parseFloat(dev.ram)) :
+                       getDeterministicValue(`unifi-${dev.id || dev.macAddress}`, 25, 68, Math.floor(Date.now() / 45000));
+
         return {
           id: devRealId,
           name: dev.name || dev.model || 'UniFi Device',
@@ -818,8 +892,8 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
           ipAddress: dev.ipAddress || '0.0.0.0',
           macAddress: dev.macAddress || '00:00:00:00:00:00',
           firmware: dev.firmwareVersion || 'v1.0.0',
-          cpuUsage: isOnline ? (dev.sys_stats?.cpu ? Math.round(parseFloat(dev.sys_stats.cpu)) : (dev.cpu ? Math.round(parseFloat(dev.cpu)) : getDeterministicValue(`unifi-${dev.id || dev.macAddress}`, 8, 38, Math.floor(Date.now() / 15000)))) : 0,
-          ramUsage: isOnline ? (dev.sys_stats?.mem ? Math.round(parseFloat(dev.sys_stats.mem)) : (dev.ram ? Math.round(parseFloat(dev.ram)) : getDeterministicValue(`unifi-${dev.id || dev.macAddress}`, 25, 68, Math.floor(Date.now() / 45000)))) : 0,
+          cpuUsage: isOnline ? cpuVal : 0,
+          ramUsage: isOnline ? ramVal : 0,
           bandwidthInMbps: isOnline ? (dev.txBytesRealtime ? Math.round((dev.txBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (dev['tx_bytes-r'] ? Math.round((dev['tx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : getDeterministicValue(`unifi-${dev.id || dev.macAddress}`, 15, 80, Math.floor(Date.now() / 8000)) / 10)) : 0,
           bandwidthOutMbps: isOnline ? (dev.rxBytesRealtime ? Math.round((dev.rxBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (dev['rx_bytes-r'] ? Math.round((dev['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : getDeterministicValue(`unifi-${dev.id || dev.macAddress}`, 5, 30, Math.floor(Date.now() / 8000)) / 10)) : 0,
           uptimeSeconds: dev.uptime || dev.uptimeSeconds || 0,
@@ -977,9 +1051,75 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
     console.log(`[UniFi Client Sync] Site UUID resolution failed: ${err.message}`);
   }
 
+  // Fetch networks to resolve virtualNetworkId -> VLAN ID
+  const networkMap = new Map<string, number>();
+  try {
+    const networkPaths = [
+      `/proxy/network/integration/v1/sites/${resolvedSiteUuid}/networks`,
+      `/proxy/network/integration/v1/networks`,
+      `/api/v1/sites/${resolvedSiteUuid}/networks`,
+      `/v1/sites/${resolvedSiteUuid}/networks`,
+      `/api/v1/networks`,
+      `/v1/networks`
+    ];
+
+    let networksData: any = null;
+    for (const netPath of networkPaths) {
+      try {
+        console.log(`[UniFi Client Sync] Fetching networks from: ${baseUrl}${netPath}`);
+        const netRes = await fetch(`${baseUrl}${netPath}`, {
+          headers: {
+            'X-API-KEY': config.apiKey || '',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+        if (netRes.ok) {
+          const contentType = netRes.headers.get('content-type') || '';
+          if (!contentType.toLowerCase().includes('text/html')) {
+            networksData = await netRes.json().catch(() => null);
+            if (networksData) {
+              console.log(`[UniFi Client Sync] Successfully loaded networks from: ${netPath}`);
+              break;
+            }
+          }
+        }
+      } catch (netErr: any) {
+        console.log(`[UniFi Client Sync] Error trying network path ${netPath}: ${netErr.message}`);
+      }
+    }
+
+    if (networksData) {
+      let rawNetworks: any[] = [];
+      if (Array.isArray(networksData)) {
+        rawNetworks = networksData;
+      } else if (networksData && Array.isArray(networksData.data)) {
+        rawNetworks = networksData.data;
+      } else if (networksData && typeof networksData === 'object') {
+        const arrayVal = Object.values(networksData).find(v => Array.isArray(v));
+        if (arrayVal) {
+          rawNetworks = arrayVal as any[];
+        }
+      }
+
+      console.log(`[UniFi Client Sync] Parsed ${rawNetworks.length} networks`);
+      for (const net of rawNetworks) {
+        const netId = net.id || net.network_id || net._id;
+        const vlanVal = net.vlanId !== undefined ? net.vlanId : (net.vlan !== undefined ? net.vlan : (net.vlan_id !== undefined ? net.vlan_id : 1));
+        if (netId) {
+          const vlanNum = parseInt(vlanVal);
+          networkMap.set(String(netId), isNaN(vlanNum) ? 1 : vlanNum);
+          console.log(`[UniFi Client Sync] Mapped Network ID '${netId}' to VLAN ID: ${vlanNum}`);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.log(`[UniFi Client Sync] Failed to fetch or map virtual networks: ${err.message}`);
+  }
+
   const pathsToTry = [
-    `/proxy/network/integration/v1/clients`,
     `/proxy/network/integration/v1/sites/${resolvedSiteUuid}/clients`,
+    `/proxy/network/integration/v1/clients`,
     `/api/v1/sites/${resolvedSiteUuid}/clients`,
     `/v1/sites/${resolvedSiteUuid}/clients`,
     `/proxy/network/v1/sites/${resolvedSiteUuid}/clients`,
@@ -1021,30 +1161,73 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
 
         try {
           const testData = await res.json();
-          
           let testClients: any[] = [];
-          if (Array.isArray(testData)) {
-            testClients = testData;
-          } else if (testData && Array.isArray(testData.data)) {
-            testClients = testData.data;
-          } else if (testData && typeof testData === 'object') {
-            const arrayVal = Object.values(testData).find(v => Array.isArray(v));
-            if (arrayVal) {
-              testClients = arrayVal as any[];
+          let currentData = testData;
+          let pageCount = 0;
+
+          while (currentData && pageCount < 20) {
+            pageCount++;
+            let pageClients: any[] = [];
+            if (Array.isArray(currentData)) {
+              pageClients = currentData;
+            } else if (currentData && Array.isArray(currentData.data)) {
+              pageClients = currentData.data;
+            } else if (currentData && typeof currentData === 'object') {
+              const arrayVal = Object.values(currentData).find(v => Array.isArray(v));
+              if (arrayVal) {
+                pageClients = arrayVal as any[];
+              }
+            }
+
+            testClients.push(...pageClients);
+
+            const nextCursor = currentData.meta?.next || currentData.pagination?.next || currentData.next;
+            if (nextCursor && typeof nextCursor === 'string') {
+              let nextUrl = '';
+              if (nextCursor.startsWith('http')) {
+                nextUrl = nextCursor;
+              } else if (nextCursor.startsWith('/')) {
+                nextUrl = `${baseUrl}${nextCursor}`;
+              } else {
+                const separator = path.includes('?') ? '&' : '?';
+                if (nextCursor.match(/^\d+$/)) {
+                  nextUrl = `${baseUrl}${path}${separator}page=${nextCursor}`;
+                } else {
+                  nextUrl = `${baseUrl}${path}${separator}cursor=${nextCursor}`;
+                }
+              }
+
+              console.log(`[UniFi Client Sync] Fetching next page of clients: ${nextUrl}`);
+              const nextRes = await fetch(nextUrl, {
+                headers: {
+                  'X-API-KEY': config.apiKey || '',
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                }
+              });
+
+              if (nextRes.ok) {
+                currentData = await nextRes.json().catch(() => null);
+              } else {
+                console.log(`[UniFi Client Sync] Next page of clients fetch failed: ${nextRes.status}`);
+                currentData = null;
+              }
+            } else {
+              currentData = null;
             }
           }
 
           if (testClients.length > 0) {
             clientsRes = res;
-            parsedData = testData;
+            parsedData = testClients;
             finalPathUsed = path;
-            console.log(`[UniFi Client Sync] Found ${testClients.length} active clients at path: ${path}. Breaking search.`);
+            console.log(`[UniFi Client Sync] Found ${testClients.length} active clients at path: ${path} across ${pageCount} pages. Breaking search.`);
             break;
           } else {
             console.log(`[UniFi Client Sync] Path ${path} succeeded but returned 0 clients. Continuing search...`);
             if (!backupClientsRes) {
               backupClientsRes = res;
-              backupClientsParsedData = testData;
+              backupClientsParsedData = testClients;
               backupClientsPathUsed = path;
             }
           }
@@ -1112,10 +1295,20 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
       deviceType = 'iot';
     }
 
-    const isWired = client.isWired === true || client.is_wired === true || client.type === 'WIRED' || String(client.connectionType).toLowerCase() === 'wired';
-    const isWifi = !isWired;
+    const hasApMac = !!(client.apMac || client.ap_mac || client.essid || client.wifiBand || client.channel);
+    const isWired = client.isWired === true || client.is_wired === true || client.type === 'WIRED' || String(client.connectionType).toLowerCase() === 'wired' || (client.connectionType !== undefined && String(client.connectionType).toLowerCase() !== 'wifi' && !hasApMac);
+    const isWifi = !isWired || hasApMac;
     const apIdOrSwitchId = client.apMac || client.ap_mac || client.switchMac || client.switch_mac || client.uplinkMac || client.uplinkDeviceMac || 'unifi-sw-ent-24';
     const apOrSwitchName = client.apName || client.ap_name || client.switchName || client.switch_name || client.uplinkName || client.uplinkDeviceName || (isWifi ? 'Office AP Enterprise' : 'Main Distribution Switch');
+
+    const mappedVlan = (() => {
+      const netId = client.virtualNetworkId || client.networkId || client.virtual_network_id || client.network_id;
+      if (netId && networkMap.has(String(netId))) {
+        return networkMap.get(String(netId))!;
+      }
+      const parsedVlan = parseInt(client.vlanId !== undefined ? client.vlanId : (client.vlan !== undefined ? client.vlan : 1));
+      return isNaN(parsedVlan) ? 1 : parsedVlan;
+    })();
 
     return {
       id: `client-real-${mac.replace(/:/g, '')}`,
@@ -1128,7 +1321,7 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
       connectionType: isWifi ? 'wifi' : 'wired',
       wifiBand: isWifi ? (client.channel && client.channel > 14 ? '5GHz' : '2.4GHz') : undefined,
       signalStrengthDbm: isWifi ? (client.rssi ? -Math.abs(client.rssi) : -62) : undefined,
-      vlanId: client.vlanId !== undefined ? client.vlanId : (client.vlan !== undefined ? client.vlan : 1),
+      vlanId: mappedVlan,
       activityInMbps: client.txBytesRealtime !== undefined ? Math.round((client.txBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (client['tx_bytes-r'] ? Math.round((client['tx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 4 * 10) / 10),
       activityOutMbps: client.rxBytesRealtime !== undefined ? Math.round((client.rxBytesRealtime * 8) / (1024 * 1024) * 10) / 10 : (client['rx_bytes-r'] ? Math.round((client['rx_bytes-r'] * 8) / (1024 * 1024) * 10) / 10 : Math.round(Math.random() * 1.5 * 10) / 10),
       totalDataDownloadedGb: client.txBytes !== undefined ? Math.round((client.txBytes / (1024 * 1024 * 1024)) * 100) / 100 : (client.tx_bytes ? Math.round((client.tx_bytes / (1024 * 1024 * 1024)) * 100) / 100 : Math.round(Math.random() * 80 * 100) / 100),
