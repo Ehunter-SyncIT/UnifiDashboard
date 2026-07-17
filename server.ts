@@ -599,17 +599,26 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   let resolvedSiteUuid = site;
   try {
     console.log(`[UniFi Sync] Attempting to resolve site UUID for: ${site}`);
-    let sitesRes = await fetch(`${baseUrl}/v1/sites`, {
+    let sitesRes = await fetch(`${baseUrl}/proxy/network/integration/v1/sites`, {
       headers: {
-        'X-API-Key': config.apiKey || '',
+        'X-API-KEY': config.apiKey || '',
         'Accept': 'application/json'
       }
     } as any).catch(() => null);
 
     if (!sitesRes || !sitesRes.ok) {
+      sitesRes = await fetch(`${baseUrl}/v1/sites`, {
+        headers: {
+          'X-API-KEY': config.apiKey || '',
+          'Accept': 'application/json'
+        }
+      } as any).catch(() => null);
+    }
+
+    if (!sitesRes || !sitesRes.ok) {
       sitesRes = await fetch(`${baseUrl}/api/v1/sites`, {
         headers: {
-          'X-API-Key': config.apiKey || '',
+          'X-API-KEY': config.apiKey || '',
           'Accept': 'application/json'
         }
       } as any).catch(() => null);
@@ -651,6 +660,8 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   
   // Try endpoints for both modern UniFi Local API (UUID-based), UniFi OS (site-independent), and self-hosted/legacy controllers
   const pathsToTry = [
+    `/proxy/network/integration/v1/devices`,
+    `/proxy/network/integration/v1/sites/${resolvedSiteUuid}/devices`,
     `/api/v1/sites/${resolvedSiteUuid}/devices`,
     `/v1/sites/${resolvedSiteUuid}/devices`,
     `/api/v1/devices`,
@@ -665,12 +676,16 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
   let lastErrorMsg = '';
   let finalPathUsed = '';
 
+  let backupDevicesRes: any = null;
+  let backupDevicesParsedData: any = null;
+  let backupDevicesPathUsed = '';
+
   for (const path of pathsToTry) {
     try {
       console.log(`[UniFi Sync] Testing path: ${baseUrl}${path}`);
       const res = await fetch(`${baseUrl}${path}`, {
         headers: {
-          'X-API-Key': config.apiKey || '',
+          'X-API-KEY': config.apiKey || '',
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         }
@@ -686,10 +701,33 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
 
         try {
           const testData = await res.json();
-          devicesRes = res;
-          parsedData = testData;
-          finalPathUsed = path;
-          break;
+          
+          let testDevices: any[] = [];
+          if (Array.isArray(testData)) {
+            testDevices = testData;
+          } else if (testData && Array.isArray(testData.data)) {
+            testDevices = testData.data;
+          } else if (testData && typeof testData === 'object') {
+            const arrayVal = Object.values(testData).find(v => Array.isArray(v));
+            if (arrayVal) {
+              testDevices = arrayVal as any[];
+            }
+          }
+
+          if (testDevices.length > 0) {
+            devicesRes = res;
+            parsedData = testData;
+            finalPathUsed = path;
+            console.log(`[UniFi Sync] Found ${testDevices.length} active devices at path: ${path}. Breaking search.`);
+            break;
+          } else {
+            console.log(`[UniFi Sync] Path ${path} succeeded but returned 0 devices. Continuing search...`);
+            if (!backupDevicesRes) {
+              backupDevicesRes = res;
+              backupDevicesParsedData = testData;
+              backupDevicesPathUsed = path;
+            }
+          }
         } catch (jsonErr: any) {
           console.log(`[UniFi Sync] Path returned non-JSON body: ${path} (${jsonErr.message})`);
           continue;
@@ -701,6 +739,13 @@ async function fetchRealUniFiDevices(config: any): Promise<NetworkDevice[]> {
       console.log(`[UniFi Sync] Path failed with error: ${path} (${err.message})`);
       lastErrorMsg = err.message;
     }
+  }
+
+  if (!devicesRes && backupDevicesRes) {
+    devicesRes = backupDevicesRes;
+    parsedData = backupDevicesParsedData;
+    finalPathUsed = backupDevicesPathUsed;
+    console.log(`[UniFi Sync] No non-empty devices response found, falling back to successful empty response at: ${finalPathUsed}`);
   }
 
   try {
@@ -873,17 +918,26 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
   let resolvedSiteUuid = site;
   try {
     console.log(`[UniFi Client Sync] Attempting to resolve site UUID for: ${site}`);
-    let sitesRes = await fetch(`${baseUrl}/v1/sites`, {
+    let sitesRes = await fetch(`${baseUrl}/proxy/network/integration/v1/sites`, {
       headers: {
-        'X-API-Key': config.apiKey || '',
+        'X-API-KEY': config.apiKey || '',
         'Accept': 'application/json'
       }
     } as any).catch(() => null);
 
     if (!sitesRes || !sitesRes.ok) {
+      sitesRes = await fetch(`${baseUrl}/v1/sites`, {
+        headers: {
+          'X-API-KEY': config.apiKey || '',
+          'Accept': 'application/json'
+        }
+      } as any).catch(() => null);
+    }
+
+    if (!sitesRes || !sitesRes.ok) {
       sitesRes = await fetch(`${baseUrl}/api/v1/sites`, {
         headers: {
-          'X-API-Key': config.apiKey || '',
+          'X-API-KEY': config.apiKey || '',
           'Accept': 'application/json'
         }
       } as any).catch(() => null);
@@ -924,6 +978,8 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
   }
 
   const pathsToTry = [
+    `/proxy/network/integration/v1/clients`,
+    `/proxy/network/integration/v1/sites/${resolvedSiteUuid}/clients`,
     `/api/v1/sites/${resolvedSiteUuid}/clients`,
     `/v1/sites/${resolvedSiteUuid}/clients`,
     `/proxy/network/v1/sites/${resolvedSiteUuid}/clients`,
@@ -940,12 +996,15 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
   let lastErrorMsg = '';
   let finalPathUsed = '';
 
+  let backupClientsRes: any = null;
+  let backupClientsParsedData: any = null;
+  let backupClientsPathUsed = '';
+
   for (const path of pathsToTry) {
     try {
       console.log(`[UniFi Client Sync] Trying endpoint: ${baseUrl}${path}`);
       const res = await fetch(`${baseUrl}${path}`, {
         headers: {
-          'X-API-Key': config.apiKey || '',
           'X-API-KEY': config.apiKey || '',
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -962,10 +1021,33 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
 
         try {
           const testData = await res.json();
-          clientsRes = res;
-          parsedData = testData;
-          finalPathUsed = path;
-          break;
+          
+          let testClients: any[] = [];
+          if (Array.isArray(testData)) {
+            testClients = testData;
+          } else if (testData && Array.isArray(testData.data)) {
+            testClients = testData.data;
+          } else if (testData && typeof testData === 'object') {
+            const arrayVal = Object.values(testData).find(v => Array.isArray(v));
+            if (arrayVal) {
+              testClients = arrayVal as any[];
+            }
+          }
+
+          if (testClients.length > 0) {
+            clientsRes = res;
+            parsedData = testData;
+            finalPathUsed = path;
+            console.log(`[UniFi Client Sync] Found ${testClients.length} active clients at path: ${path}. Breaking search.`);
+            break;
+          } else {
+            console.log(`[UniFi Client Sync] Path ${path} succeeded but returned 0 clients. Continuing search...`);
+            if (!backupClientsRes) {
+              backupClientsRes = res;
+              backupClientsParsedData = testData;
+              backupClientsPathUsed = path;
+            }
+          }
         } catch (jsonErr: any) {
           console.log(`[UniFi Client Sync] Path returned non-JSON body: ${path} (${jsonErr.message})`);
           continue;
@@ -977,6 +1059,13 @@ async function fetchRealUniFiClients(config: any): Promise<any[]> {
       console.log(`[UniFi Client Sync] Error trying path ${path}: ${err.message}`);
       lastErrorMsg = err.message;
     }
+  }
+
+  if (!clientsRes && backupClientsRes) {
+    clientsRes = backupClientsRes;
+    parsedData = backupClientsParsedData;
+    finalPathUsed = backupClientsPathUsed;
+    console.log(`[UniFi Client Sync] No non-empty clients response found, falling back to successful empty response at: ${finalPathUsed}`);
   }
 
   if (!clientsRes) {
