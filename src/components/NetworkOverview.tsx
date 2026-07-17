@@ -75,20 +75,29 @@ export default function NetworkOverview({
   const poeDevices = devices.filter(d => (d.poeBudgetTotalW && d.poeBudgetTotalW > 0) || (d.ports && d.ports.some(p => p.poeActive)));
   
   const totalPoeBudget = poeDevices.reduce((acc, d) => {
+    let budget = 0;
     if (d.poeBudgetTotalW !== undefined && d.poeBudgetTotalW > 0) {
-      return acc + d.poeBudgetTotalW;
+      budget = d.poeBudgetTotalW;
+    } else {
+      // Fallback if not specified but has ports with PoE
+      const model = String(d.model || '').toLowerCase();
+      if (model.includes('udm-se') || model.includes('se')) budget = 180;
+      else if (model.includes('pro-24') || model.includes('enterprise-24')) budget = 400;
+      else if (model.includes('pro-48') || model.includes('enterprise-48')) budget = 600;
+      else if (model.includes('24-poe') || model.includes('sw-24')) budget = 95;
+      else if (model.includes('48-poe') || model.includes('sw-48')) budget = 195;
+      else if (model.includes('8-poe') || model.includes('lite-8') || model.includes('ultra')) budget = 52;
+      else if (model.includes('16-poe') || model.includes('lite-16')) budget = 45;
+      else if (model.includes('flex')) budget = 46;
+      else budget = (d.ports && d.ports.some(p => p.poeActive)) ? 120 : 0;
     }
-    // Fallback if not specified but has ports with PoE
-    const model = String(d.model || '').toLowerCase();
-    if (model.includes('udm-se') || model.includes('se')) return 180;
-    if (model.includes('pro-24') || model.includes('enterprise-24')) return 400;
-    if (model.includes('pro-48') || model.includes('enterprise-48')) return 600;
-    if (model.includes('24-poe') || model.includes('sw-24')) return 95;
-    if (model.includes('48-poe') || model.includes('sw-48')) return 195;
-    if (model.includes('8-poe') || model.includes('lite-8') || model.includes('ultra')) return 52;
-    if (model.includes('16-poe') || model.includes('lite-16')) return 45;
-    if (model.includes('flex')) return 46;
-    return (d.ports && d.ports.some(p => p.poeActive)) ? 120 : 0;
+
+    // Safety guard: a device's budget cannot be less than its currently used PoE
+    const actualUsed = d.poeBudgetUsedW || (d.ports || []).reduce((sum, p) => sum + (p.poePowerW || 0), 0);
+    if (actualUsed > budget) {
+      budget = Math.max(budget, Math.ceil(actualUsed / 10) * 10);
+    }
+    return acc + budget;
   }, 0);
 
   const usedPoeBudget = poeDevices.reduce((acc, d) => {

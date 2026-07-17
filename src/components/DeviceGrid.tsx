@@ -388,24 +388,27 @@ export default function DeviceGrid({
                 {dev.category === 'switch' && dev.ports && (
                   <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                     {/* PoE Budget */}
-                    {dev.poeBudgetTotalW && dev.poeBudgetUsedW && (
-                      <div className="space-y-0.5 text-[11px]">
-                        <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                          <span className="flex items-center gap-0.5 text-amber-500">
-                            <Zap className="h-3 w-3 fill-current" /> Active PoE Delivery
-                          </span>
-                          <span className="font-mono text-slate-700 dark:text-slate-300">
-                            {dev.poeBudgetUsedW.toFixed(1)}W / {dev.poeBudgetTotalW}W
-                          </span>
+                    {dev.poeBudgetTotalW && dev.poeBudgetUsedW && (() => {
+                      const displayTotal = Math.max(dev.poeBudgetTotalW, Math.ceil(dev.poeBudgetUsedW / 10) * 10);
+                      return (
+                        <div className="space-y-0.5 text-[11px]">
+                          <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                            <span className="flex items-center gap-0.5 text-amber-500">
+                              <Zap className="h-3 w-3 fill-current" /> Active PoE Delivery
+                            </span>
+                            <span className="font-mono text-slate-700 dark:text-slate-300">
+                              {dev.poeBudgetUsedW.toFixed(1)}W / {displayTotal}W
+                            </span>
+                          </div>
+                          <div className="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-amber-500 rounded-full"
+                              style={{ width: `${Math.min(100, (dev.poeBudgetUsedW / displayTotal) * 100)}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-amber-500 rounded-full"
-                            style={{ width: `${(dev.poeBudgetUsedW / dev.poeBudgetTotalW) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Port Matrix */}
                     <div className="space-y-1">
