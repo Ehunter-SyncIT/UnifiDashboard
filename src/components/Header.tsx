@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Sun, Moon, Cpu, Shield, Activity, Wifi, Settings, Terminal } from 'lucide-react';
+import { ArrowDown, ArrowUp, Sun, Moon, Cpu, Shield, Activity, Wifi, Settings, Terminal } from 'lucide-react';
 
 interface HeaderProps {
   darkMode: boolean;
@@ -71,14 +71,14 @@ export default function Header({
             </div>
             
             <div className="flex items-center space-x-1.5 border-l border-slate-200 dark:border-slate-800 pl-4">
-              <Sun className="h-3.5 w-3.5 text-amber-500" />
+              <ArrowDown className="h-3.5 w-3.5 text-blue-500 animate-bounce-slow" />
               <span className="text-slate-600 dark:text-slate-300">
                 WAN RX: <strong className="text-slate-900 dark:text-slate-100">{totalDownloadMbps.toFixed(1)} Mbps</strong>
               </span>
             </div>
 
             <div className="flex items-center space-x-1.5 border-l border-slate-200 dark:border-slate-800 pl-4">
-              <Moon className="h-3.5 w-3.5 text-indigo-400" />
+              <ArrowUp className="h-3.5 w-3.5 text-emerald-500 animate-bounce-slow" />
               <span className="text-slate-600 dark:text-slate-300">
                 WAN TX: <strong className="text-slate-900 dark:text-slate-100">{totalUploadMbps.toFixed(1)} Mbps</strong>
               </span>
